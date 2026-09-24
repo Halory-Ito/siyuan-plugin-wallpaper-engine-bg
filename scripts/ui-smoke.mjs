@@ -278,6 +278,30 @@ try {
     assert(openSettings(p1).slider("stBlur").value === "21", "onDataChanged adopts the external config");
     assert(stub.saves.length === 0, "onDataChanged does not write back");
 
+    // 8) 关键回归：本地有未保存改动时收到「存储变更」→ 不能被磁盘上的旧内容回滚
+    //    （这正是「点了预设立刻被弹回去、而且什么都没保存」的成因）
+    await closePlugin();
+    seed("object");
+    p1 = await freshPlugin();
+    const blurSlider3 = openSettings(p1).slider("stBlur");
+    blurSlider3.value = "9";
+    blurSlider3.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+    // 防抖窗口（300ms）内收到外部变更，此时磁盘上还是旧内容
+    await p1.onDataChanged("overwrite");
+    await sleep(700);
+    assert(stub.files["local.json"].blur === 9, "unsaved local change wins over an external data change");
+
+    // 9) 读取失败时即使用户改了东西，也绝不能把默认值写到磁盘上
+    await closePlugin();
+    seed("broken");
+    p1 = await freshPlugin();
+    const blurSlider4 = openSettings(p1).slider("stBlur");
+    blurSlider4.value = "5";
+    blurSlider4.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+    await sleep(900);
+    assert(stub.saves.length === 0, `broken read blocks writes even after a user change (${stub.saves.length} writes)`);
+    assert(stub.files["local.json"].blur === 33, "stored config survives a broken read plus a user change");
+
     await closePlugin();
 } catch (err) {
     failed = true;

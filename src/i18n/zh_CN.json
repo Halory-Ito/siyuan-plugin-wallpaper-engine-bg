@@ -151,5 +151,9 @@
   "codeSwBlack": "纯黑",
   "codeSwLight": "浅灰",
   "codeSwCream": "米色",
-  "codeSwWhite": "纯白"
+  "codeSwWhite": "纯白",
+  "stStorage": "配置存储",
+  "stStorageDesc": "当前配置的读取状态；若显示读取失败，插件会跳过写盘以保护已保存的配置，可点右侧按钮重新读取。",
+  "stReload": "重新读取",
+  "stReloaded": "已重新读取配置"
 }

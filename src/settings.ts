@@ -1,5 +1,5 @@
 import { Dialog, showMessage } from "siyuan";
-import { state, saveState, defaultPanels, resetCommon } from "./store";
+import { state, saveState, defaultPanels, resetCommon, reloadFromDisk, storageDiag } from "./store";
 import { detectRoots } from "./we";
 import { t, tArgs } from "./i18n";
 import type { Host } from "./host";
@@ -154,6 +154,16 @@ export function openSettingsDialog(host: Host): void {
                     render();
                     showMessage(t("stResetDone"), 2000);
                 }), t("stResetDesc")),
+                row(t("stStorage"), el("div", { class: "we-inline we-nowrap" },
+                    el("span", { class: "we-status" }, `${storageDiag.common} / ${storageDiag.device}`),
+                    buttonEl(t("stReload"), () => {
+                        void reloadFromDisk().then(() => {
+                            host.applyLook();
+                            render();
+                            showMessage(t("stReloaded"), 2000);
+                        });
+                    })
+                ), t("stStorageDesc")),
                 el("div", { class: "we-srow we-srow--hint" },
                     el("div", { class: "we-sinfo" }, el("div", { class: "we-shint" }, t("stShortcuts"))))
             )

@@ -1,6 +1,6 @@
 {
   "name": "wallpaper-engine-bg",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "private": true,
   "description": "SiYuan plugin: Wallpaper Engine wallpapers as background with adjustable mask brightness and blur",
   "type": "module",

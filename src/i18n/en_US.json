@@ -151,5 +151,9 @@
   "codeSwBlack": "Black",
   "codeSwLight": "Light gray",
   "codeSwCream": "Cream",
-  "codeSwWhite": "White"
+  "codeSwWhite": "White",
+  "stStorage": "Config storage",
+  "stStorageDesc": "Read status of the stored config. On a read failure the plugin skips writing so your saved config stays intact; use the button to re-read.",
+  "stReload": "Re-read",
+  "stReloaded": "Config re-read"
 }
