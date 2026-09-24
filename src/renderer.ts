@@ -134,6 +134,7 @@ export class BgRenderer {
     private backdropVideo: HTMLVideoElement | null = null;
     private syncTimer: ReturnType<typeof setInterval> | null = null;
     private kind: ResolvedWallpaper["kind"] | null = null;
+    private wallpaperKey: string | null = null;
     private lastCfg: CommonConfig | null = null;
     private observer: MutationObserver | null = null;
     private userPaused = false;
@@ -141,6 +142,11 @@ export class BgRenderer {
 
     get currentKind(): ResolvedWallpaper["kind"] | null {
         return this.kind;
+    }
+
+    /** 当前已渲染壁纸的稳定标识；用于判断是否需要重新加载素材 */
+    get currentKey(): string | null {
+        return this.wallpaperKey;
     }
 
     mount(): void {
@@ -198,6 +204,7 @@ export class BgRenderer {
         if (!this.layer || !this.backdrop) return;
         this.clearMedia();
         this.kind = resolved.kind;
+        this.wallpaperKey = resolved.key;
 
         // blurfill：同一素材放大模糊铺底，前景完整显示，窗口比例不匹配也不裁剪
         const useBackdrop = cfg.fit === "blurfill" && resolved.kind !== "web";
@@ -238,6 +245,7 @@ export class BgRenderer {
         this.media = null;
         this.backdropVideo = null;
         this.kind = null;
+        this.wallpaperKey = null;
         if (this.backdrop) {
             this.backdrop.style.display = "none";
             this.backdrop.style.backgroundImage = "";

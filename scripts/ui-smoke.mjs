@@ -214,6 +214,25 @@ try {
     // 启动时没有变化 → 一次也不应该写盘（否则每次重载都会产生存储变更通知 → 无限重载）
     assert(stub.saves.length === 0, `no write on startup when nothing changed (${stub.saves.length} writes)`);
 
+    // 1b) 关键回归：启动时必须把「界面透明」套用一次，否则重启后 panels 模式不生效
+    await closePlugin();
+    seed("object", savedCommon({
+        uiMode: "panels",
+        uiStrength: 1,
+        panels: { editor: { useTheme: false, color: "#112233", colorDark: "#445566", alpha: 0.5 } },
+    }));
+    p1 = await freshPlugin();
+    assert(document.documentElement.classList.contains("we-bg-panels"), "startup applies the stored panel transparency mode");
+    assert(panelCss().includes("rgba(17, 34, 51"), "startup paints the stored panel colors");
+
+    // 1c) 关闭状态重启：背景层必须隐藏，也不得写盘
+    await closePlugin();
+    seed("object", savedCommon({ enabled: false }));
+    p1 = await freshPlugin();
+    assert(document.querySelector("#we-bg")?.classList.contains("we-off"), "startup hides the background when disabled");
+    assert(!document.documentElement.classList.contains("we-bg-panels"), "disabled startup does not force panel transparency");
+    assert(stub.saves.length === 0, `disabled startup does not write (${stub.saves.length} writes)`);
+
     // 2) JSON 字符串形状（非 json 响应类型时 fetchPost 走 response.text()）
     await closePlugin();
     seed("string");

@@ -47,13 +47,11 @@ export default class WallpaperEngineBg extends Plugin implements Host {
 
         if (state.common.enabled) {
             await this.refreshLibrary();
-            if (state.common.randomOnStart) {
-                this.randomWallpaper();
-            } else {
-                await this.applyCurrent();
-            }
-            this.startRotation();
+            if (state.common.randomOnStart) this.randomWallpaper();
         }
+        // 启动时完整套用一次配置（含界面透明模式），否则重启后 panels/opacity 要等到
+        // 用户动一下设置才会生效 —— 看起来就是「设置没存下来」。
+        this.applyConfig();
     }
 
     /**
@@ -67,14 +65,7 @@ export default class WallpaperEngineBg extends Plugin implements Host {
         const changed = await onExternalDataChange();
         if (!changed) return;
         // 只重新套用，不写回（基线已在 store 里同步）
-        this.renderer.setVisible(state.common.enabled);
-        if (state.common.enabled) {
-            this.renderer.applyUI(state.common);
-            this.renderer.applyLook(state.common);
-        } else {
-            this.renderer.restoreUI();
-        }
-        this.startRotation();
+        this.applyConfig();
         void reason;
     }
 
@@ -136,13 +127,8 @@ export default class WallpaperEngineBg extends Plugin implements Host {
 
     private toggleEnabled(): void {
         state.common.enabled = !state.common.enabled;
+        // applyLook 会写盘（防抖）并完整套用配置（含界面透明与轮换定时器）
         this.applyLook();
-        if (state.common.enabled) {
-            void this.applyCurrent();
-            this.startRotation();
-        } else {
-            this.stopRotation();
-        }
         showMessage(state.common.enabled ? t("cmdEnable") : t("cmdDisable"), 2000);
     }
 
@@ -161,16 +147,29 @@ export default class WallpaperEngineBg extends Plugin implements Host {
 
     applyLook(): void {
         saveState();
+        this.applyConfig();
+    }
+
+    /**
+     * 把内存里的配置完整套用到界面与画面（不写盘）。
+     *
+     * 启动加载、外部存储变更、用户改动都走这一条路径，保证「设置过的都会生效」：
+     * 可见性 / 界面透明模式 / 画面参数 / 轮换定时器一次到位；壁纸本身只在
+     * 目标发生变化时才重新加载（否则每次调参都会重建 video / iframe）。
+     */
+    private applyConfig(): void {
         this.renderer.setVisible(state.common.enabled);
-        if (state.common.enabled) {
-            this.renderer.applyUI(state.common);
-            if (this.renderer.currentKind) {
-                this.renderer.applyLook(state.common);
-            } else {
-                void this.applyCurrent();
-            }
-        } else {
+        if (!state.common.enabled) {
             this.renderer.restoreUI();
+            this.startRotation();
+            return;
+        }
+        this.renderer.applyUI(state.common);
+        const resolved = this.resolveCurrent();
+        if (resolved && resolved.key === this.renderer.currentKey) {
+            this.renderer.applyLook(state.common);
+        } else {
+            void this.applyCurrent();
         }
         this.startRotation();
     }
@@ -212,7 +211,7 @@ export default class WallpaperEngineBg extends Plugin implements Host {
         if (!wp.supported) {
             showMessage(t("libSceneNote"), 4000);
         }
-        void this.applyCurrent();
+        this.applyConfig();
     }
 
     randomWallpaper(): void {
@@ -270,7 +269,10 @@ export default class WallpaperEngineBg extends Plugin implements Host {
     async applyCurrent(): Promise<void> {
         try {
             const resolved = this.resolveCurrent();
-            if (!resolved) return;
+            if (!resolved) {
+                this.renderer.clearMedia();
+                return;
+            }
             this.renderer.show(resolved, state.common);
             this.renderer.setVisible(state.common.enabled);
         } catch (err) {
