@@ -1,0 +1,22 @@
+{
+  "name": "wallpaper-engine-bg",
+  "version": "0.4.1",
+  "private": true,
+  "description": "SiYuan plugin: Wallpaper Engine wallpapers as background with adjustable mask brightness and blur",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/gen-icons.mjs && node build.mjs",
+    "watch": "node build.mjs --watch",
+    "icons": "node scripts/gen-icons.mjs",
+    "smoke": "node scripts/smoke.mjs",
+    "ui-smoke": "node scripts/ui-smoke.mjs",
+    "test": "npm run smoke && npm run ui-smoke"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.2",
+    "esbuild": "^0.25.0",
+    "jsdom": "^29.1.1",
+    "siyuan": "latest",
+    "typescript": "^5.6.0"
+  }
+}
