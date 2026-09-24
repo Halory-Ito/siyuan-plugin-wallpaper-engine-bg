@@ -60,10 +60,18 @@ Copy `dist/` into your workspace plugin folder and rename it to `wallpaper-engin
 ├── icon.png
 ├── preview.png
 ├── cover.jpg
+├── CHANGELOG.md
 └── i18n/
 ```
 
 Restart SiYuan and enable the plugin.
+
+You can also build a bazaar-compliant `package.zip` (files live at the zip root, so extracting it
+gives you the plugin folder directly) for a GitHub Release:
+
+```bash
+npm run package    # build + write package.zip
+```
 
 ## Usage
 
@@ -123,9 +131,12 @@ Restart SiYuan and enable the plugin.
 npm i
 npm run build     # bundle to dist/
 npm run watch     # rebuild on change
-npm run smoke     # smoke test: scanning + local server + traversal guard
+npm run package   # build + write package.zip (for releases)
+npm run test      # smoke tests: smoke + ui-smoke
 npx tsc --noEmit  # type check
 ```
+
+Version history: [CHANGELOG.md](./CHANGELOG.md).
 
 ## License
 

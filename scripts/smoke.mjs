@@ -6,6 +6,7 @@ import { build } from "esbuild";
 import { createRequire } from "node:module";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { inflateRawSync } from "node:zlib";
 import path from "node:path";
 
 const require = createRequire(import.meta.url);
@@ -115,6 +116,47 @@ const customCss = cssOf({ editor: basePanel({ useTheme: false, color: "#112233",
 assert(customCss.includes("rgba(17, 34, 51"), "custom light color emitted as rgba");
 assert(customCss.includes('html[data-theme-mode="dark"]'), "custom dark-mode color emitted");
 assert(!cssOf({ sidebar: basePanel({ alpha: 0.2 }) }, 0).includes("color-mix"), "uiStrength 0 makes every surface transparent");
+
+// 6. package.zip 用的是手写 ZIP 编码，必须能自洽（本地头 / deflate 往返 / EOCD）
+const { createZip } = await import("../scripts/package.mjs");
+
+/** 只解本地文件头，用于校验 createZip 的输出 */
+function readZip(buf) {
+    const out = [];
+    let p = 0;
+    while (p + 30 <= buf.length && buf.readUInt32LE(p) === 0x04034b50) {
+        const method = buf.readUInt16LE(p + 8);
+        const csize = buf.readUInt32LE(p + 18);
+        const nlen = buf.readUInt16LE(p + 26);
+        const elen = buf.readUInt16LE(p + 28);
+        const name = buf.subarray(p + 30, p + 30 + nlen).toString("utf8");
+        const start = p + 30 + nlen + elen;
+        const body = buf.subarray(start, start + csize);
+        out.push({ name, data: method === 0 ? body : inflateRawSync(body) });
+        p = start + csize;
+    }
+    return out;
+}
+
+const zipEntries = [
+    { name: "a.txt", data: Buffer.from("hello 世界") },
+    { name: "i18n/zh_CN.json", data: Buffer.from("{\"k\":\"" + "值".repeat(2000) + "\"}") },
+    { name: "icon.png", data: Buffer.alloc(64, 7) },
+];
+const zipBuf = createZip(zipEntries);
+const unpacked = readZip(zipBuf);
+assert(zipBuf.readUInt32LE(0) === 0x04034b50, "package.zip starts with a local file header");
+assert(unpacked.length === zipEntries.length, `package.zip holds every entry (got ${unpacked.length})`);
+assert(
+    unpacked.every((e, i) => e.name === zipEntries[i].name && Buffer.compare(e.data, zipEntries[i].data) === 0),
+    "package.zip round-trips names and contents"
+);
+const eocd = zipBuf.subarray(zipBuf.length - 22);
+assert(
+    eocd.readUInt32LE(0) === 0x06054b50 && eocd.readUInt16LE(10) === zipEntries.length,
+    "package.zip ends with a valid central directory record"
+);
+assert(unpacked.some((e) => e.name.includes("/")), "package.zip keeps subdirectory paths with forward slashes");
 
 rmSync(root, { recursive: true, force: true });
 rmSync("tmp-smoke", { recursive: true, force: true });

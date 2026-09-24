@@ -1,6 +1,6 @@
 {
   "name": "wallpaper-engine-bg",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "minAppVersion": "3.3.0",
   "backends": ["windows", "linux", "darwin", "docker"],
   "frontends": ["desktop", "desktop-window", "browser-desktop"],

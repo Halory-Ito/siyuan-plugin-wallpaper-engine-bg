@@ -59,10 +59,18 @@ npm run build      # 生成 dist/
 ├── icon.png
 ├── preview.png
 ├── cover.jpg
+├── CHANGELOG.md
 └── i18n/
 ```
 
 重启思源（或在「设置 → 集市 → 已下载」中刷新）后启用插件。
+
+也可以直接打包成集市规范的 `package.zip`（文件位于 zip 根目录，解压即插件目录），
+用于发布 GitHub Release：
+
+```bash
+npm run package    # 构建 + 生成 package.zip
+```
 
 ## 使用
 
@@ -120,9 +128,12 @@ npm run build      # 生成 dist/
 npm i
 npm run build     # 打包到 dist/
 npm run watch     # 监听重建
-npm run smoke     # 冒烟测试：扫描 + 本地服务器 + 越界防护
+npm run package   # 构建并生成 package.zip（发布用）
+npm run test      # 冒烟测试：smoke + ui-smoke
 npx tsc --noEmit  # 类型检查
 ```
+
+版本变更记录见 [CHANGELOG.md](./CHANGELOG.md)。
 
 代码结构：
 

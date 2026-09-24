@@ -23,7 +23,7 @@ const options = {
 
 function copyStatic() {
     mkdirSync(outdir, { recursive: true });
-    for (const file of ["plugin.json", "README.md", "README_en_US.md", "LICENSE", "icon.png", "preview.png", "cover.jpg"]) {
+    for (const file of ["plugin.json", "README.md", "README_en_US.md", "CHANGELOG.md", "LICENSE", "icon.png", "preview.png", "cover.jpg"]) {
         if (existsSync(file)) cpSync(file, path.join(outdir, file));
     }
     rmSync(path.join(outdir, "i18n"), { recursive: true, force: true });
