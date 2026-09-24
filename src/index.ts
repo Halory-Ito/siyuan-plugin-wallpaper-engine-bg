@@ -1,8 +1,9 @@
 import { Plugin, Setting, showMessage } from "siyuan";
+import type { TPluginDataChangeReason } from "siyuan";
 import { BgRenderer } from "./renderer";
 import { LocalServer } from "./server";
 import { VIDEO_EXT, detectRoots, scanRoots } from "./we";
-import { loadState, saveState, state, persistNow } from "./store";
+import { finishStartup, loadState, reloadFromDisk, saveState, state, persistNow } from "./store";
 import { openSettingsDialog } from "./settings";
 import { openQuickPanel } from "./quick";
 import { openLibrary } from "./library";
@@ -53,6 +54,31 @@ export default class WallpaperEngineBg extends Plugin implements Host {
             }
             this.startRotation();
         }
+
+        // 启动阶段结束：此后配置读取即使出过问题也允许写盘，否则用户的改动会丢
+        finishStartup();
+    }
+
+    /**
+     * 插件存储数据变化（跨窗口 / 跨设备同步）时思源会调用它。
+     *
+     * 必须实现：**没覆盖基类实现时思源会直接重载整个插件**，而重载会再次执行
+     * onunload → 写盘 → 存储变更 → 再重载，形成无限重载循环；
+     * 循环中读到半成品文件就会回退到默认值，看起来就是「设置不持久化」。
+     */
+    async onDataChanged(reason?: TPluginDataChangeReason): Promise<void> {
+        const changed = await reloadFromDisk();
+        if (!changed) return;
+        // 只重新套用，不写回（reloadFromDisk 已重置写盘基线）
+        this.renderer.setVisible(state.common.enabled);
+        if (state.common.enabled) {
+            this.renderer.applyUI(state.common);
+            this.renderer.applyLook(state.common);
+        } else {
+            this.renderer.restoreUI();
+        }
+        this.startRotation();
+        void reason;
     }
 
     onLayoutReady(): void {

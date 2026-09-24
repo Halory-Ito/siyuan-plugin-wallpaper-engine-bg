@@ -8,6 +8,7 @@ import { createRequire } from "node:module";
 import { JSDOM } from "jsdom";
 import { rmSync } from "node:fs";
 import path from "node:path";
+import { Plugin as StubPlugin } from "./siyuan-stub.mjs";
 
 const require = createRequire(import.meta.url);
 
@@ -123,6 +124,161 @@ try {
 
     await plugin.onunload();
     assert(!document.querySelector("#we-bg"), "plugin cleanup runs");
+
+    /* ---------------- 配置持久化回归测试 ---------------- */
+
+    const stub = globalThis.__siyuanStub;
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    const indexCjs = require.resolve(path.resolve("tmp-ui-smoke/index.cjs"));
+    let current = null;
+
+    // 每个用例一个全新插件实例（重新 require 拿到全新的模块级 state）
+    const freshPlugin = async () => {
+        delete require.cache[indexCjs];
+        const PluginClass2 = load("index").default;
+        const p = new PluginClass2({ app: {}, name: "wallpaper-engine-bg", displayName: "we", i18n: {} });
+        current = p;
+        await p.onload();
+        return p;
+    };
+    const closePlugin = async () => {
+        if (!current) return;
+        const p = current;
+        current = null;
+        await p.onunload();
+    };
+
+    /** 打开设置页并在最新一个对话框里按标签找控件 */
+    const openSettings = (p) => {
+        p.openSetting();
+        const root = [...document.querySelectorAll(".we-settings")].pop();
+        const rowOf = (key) =>
+            [...root.querySelectorAll(".we-srow")].find((r) => r.querySelector(".we-slabel")?.textContent === key);
+        return { slider: (key) => rowOf(key)?.querySelector('input[type="range"]'), sliders: (key) => [...(rowOf(key)?.querySelectorAll('input[type="range"]') ?? [])] };
+    };
+
+    /** 一份「用户调过」的配置：值都不是默认值，方便判断到底读没读到 */
+    const savedCommon = (over = {}) => ({
+        enabled: true,
+        urlWallpaper: "",
+        rotateMinutes: 0,
+        randomOnStart: false,
+        fit: "cover",
+        positionX: 0,
+        positionY: 32,
+        maskEnabled: true,
+        maskColor: "#000000",
+        maskOpacity: 0.77,
+        blur: 33,
+        brightness: 0.4,
+        saturate: 2,
+        uiMode: "panels",
+        uiStrength: 0.2,
+        panels: {},
+        muted: true,
+        volume: 0,
+        playbackRate: 1,
+        pauseWhenHidden: true,
+        webMuted: true,
+        ...over,
+    });
+
+    // 先空跑一次，探出本机 device 文件名（device-<主机名>-<用户名>.json）
+    stub.shape = "object";
+    stub.files = {};
+    await freshPlugin();
+    const deviceName = stub.loads.find((n) => n !== "local.json");
+    assert(typeof deviceName === "string" && deviceName.startsWith("device-"), `device storage name discovered (${deviceName})`);
+    await closePlugin();
+
+    /** 预置存储：同时写入 device 文件，避免启动时自动探测目录又产生写盘 */
+    const seed = (shape, common = savedCommon()) => {
+        stub.shape = shape;
+        stub.failSaves = 0;
+        stub.loads.length = 0;
+        stub.saves.length = 0;
+        stub.files = {};
+        stub.files["local.json"] = common;
+        stub.files[deviceName] = { hostId: "seed", workshopDirs: [path.resolve("tmp-ui-smoke")], wallpaper: null };
+    };
+
+    // 1) 对象形状（内核以 application/json 返回时 fetchPost 直接解析）
+    await closePlugin();
+    seed("object");
+    let p1 = await freshPlugin();
+    let ui = openSettings(p1);
+    assert(ui.slider("stBlur").value === "33", `blur restored from stored config (got ${ui.slider("stBlur").value})`);
+    assert(ui.slider("stMaskOpacity").value === "0.77", "mask opacity restored from stored config");
+    assert(ui.sliders("stPosition")[1]?.value === "32", "wallpaper position restored from stored config");
+
+    // 启动时没有变化 → 一次也不应该写盘（否则每次重载都会产生存储变更通知 → 无限重载）
+    assert(stub.saves.length === 0, `no write on startup when nothing changed (${stub.saves.length} writes)`);
+
+    // 2) JSON 字符串形状（非 json 响应类型时 fetchPost 走 response.text()）
+    await closePlugin();
+    seed("string");
+    p1 = await freshPlugin();
+    assert(openSettings(p1).slider("stBlur").value === "33", "stored config parsed from a JSON string");
+
+    // 3) {code,msg,data} 封套
+    await closePlugin();
+    seed("envelope");
+    p1 = await freshPlugin();
+    assert(openSettings(p1).slider("stBlur").value === "33", "stored config unwrapped from an envelope");
+
+    // 4) 读取失败（文件被写坏 / 与写盘撞上）：不得用默认值覆盖磁盘上的配置
+    await closePlugin();
+    seed("broken");
+    p1 = await freshPlugin();
+    assert(openSettings(p1).slider("stBlur").value === "4", "unreadable storage falls back to defaults in memory");
+    assert(stub.saves.length === 0, `unreadable storage is not overwritten on startup (${stub.saves.length} writes)`);
+    assert(stub.files["local.json"].blur === 33, "stored config is left untouched after a broken read");
+
+    // 5) 用户改动 → 防抖写盘，且内容真的是改后的
+    await closePlugin();
+    seed("object");
+    p1 = await freshPlugin();
+    const blurSlider = openSettings(p1).slider("stBlur");
+    blurSlider.value = "12";
+    blurSlider.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+    assert(stub.saves.length === 0, "write is debounced, not immediate");
+    await sleep(700);
+    assert(
+        stub.saves.some((s) => s.name === "local.json" && s.data.blur === 12),
+        "user change is persisted after the debounce"
+    );
+
+    // 6) 写入失败（Windows 上 rename 可能被拒绝）→ 重试一次
+    await closePlugin();
+    seed("object");
+    p1 = await freshPlugin();
+    const blurSlider2 = openSettings(p1).slider("stBlur");
+    blurSlider2.value = "7";
+    blurSlider2.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+    stub.failSaves = 1; // 第一次写盘失败
+    await sleep(1200);
+    assert(
+        stub.saves.filter((s) => s.name === "local.json").length >= 2,
+        `failed write is retried (${stub.saves.filter((s) => s.name === "local.json").length} attempts)`
+    );
+    assert(stub.files["local.json"].blur === 7, "retried write eventually lands");
+
+    // 7) onDataChanged 必须覆盖基类实现：否则思源会把「存储变更」当成重载信号，
+    //    而重载又会写盘 → 存储变更 → 再重载，形成无限循环
+    await closePlugin();
+    seed("object");
+    p1 = await freshPlugin();
+    assert(
+        p1.onDataChanged !== StubPlugin.prototype.onDataChanged,
+        "onDataChanged is overridden so SiYuan does not reload the plugin on storage change"
+    );
+    stub.files["local.json"] = savedCommon({ blur: 21 });
+    stub.saves.length = 0;
+    await p1.onDataChanged("overwrite");
+    assert(openSettings(p1).slider("stBlur").value === "21", "onDataChanged adopts the external config");
+    assert(stub.saves.length === 0, "onDataChanged does not write back");
+
+    await closePlugin();
 } catch (err) {
     failed = true;
     console.error("FAIL: exception thrown\n", err);
