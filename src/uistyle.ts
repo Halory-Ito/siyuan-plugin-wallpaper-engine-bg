@@ -22,24 +22,45 @@ export const UI_CSS = `
 textarea.we-text { min-height: 72px; resize: vertical; font-family: var(--b3-font-family-code, monospace); font-size: 12px; padding: 8px 10px; }
 .we-status { opacity: .6; font-size: 12px; }
 
-/* —— 设置页：minimal（无卡片无边框块，仅发丝线 + 留白分组） —— */
-.we-settings { display: flex; flex-direction: column; gap: 26px; padding: 6px 8px 18px; }
+/* —— 设置页：左侧标签栏 + 右侧内容（参考 background-cover 的 config 布局） —— */
+.we-settings { display: flex; align-items: stretch; height: 100%; overflow: hidden; }
+.we-tab-side { flex: 0 0 150px; display: flex; flex-direction: column; gap: 2px; padding: 10px 8px; border-right: 1px solid var(--b3-border-color); overflow-y: auto; }
+.we-tab-item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 6px; cursor: pointer; user-select: none; opacity: .8; }
+.we-tab-item:not(.we-tab-item--on):hover { background: var(--b3-theme-surface); }
+.we-tab-item--on { background: var(--b3-theme-primary); color: #fff; opacity: 1; }
+.we-tab-icon { display: inline-flex; align-items: center; }
+.we-tab-icon svg { width: 16px; height: 16px; fill: currentColor; }
+.we-tab-item-text { font-size: 13px; }
+.we-tab-wrap { flex: 1; min-width: 0; overflow-y: auto; padding: 6px 20px 20px; }
+.we-pane { display: none; }
+.we-pane--on { display: block; }
+.we-pane-body { display: flex; flex-direction: column; }
 .we-sec { display: flex; flex-direction: column; }
-.we-sec-title { margin: 0 0 2px; font-size: 12px; font-weight: 600; letter-spacing: .08em; opacity: .42; }
-.we-srow { display: grid; grid-template-columns: minmax(150px, 32%) 1fr; align-items: center; gap: 20px; padding: 11px 0; border-top: 1px solid var(--b3-border-color); }
-.we-sec .we-srow:first-of-type { border-top: none; padding-top: 6px; }
-.we-srow--column { align-items: stretch; }
+.we-sec-title { margin: 18px 0 2px; font-size: 12px; font-weight: 600; letter-spacing: .08em; opacity: .42; }
+.we-srow { display: flex; align-items: center; gap: 20px; padding: 12px 0; border-top: 1px solid var(--b3-border-color); }
+.we-pane-body > .we-srow:first-child, .we-sec .we-srow:first-of-type { border-top: none; }
+.we-srow--column { flex-direction: column; align-items: stretch; gap: 10px; }
 .we-srow--column textarea { width: 100%; }
+.we-srow--hint { border-top: 1px solid var(--b3-border-color); }
 .we-sinfo { min-width: 0; }
 .we-slabel { font-size: 13px; line-height: 1.5; }
 .we-shint { margin-top: 3px; font-size: 11.5px; line-height: 1.55; opacity: .5; }
 .we-sctl { display: flex; align-items: center; justify-content: flex-end; gap: 10px; min-width: 0; flex-wrap: wrap; }
 .we-sctl.we-nowrap { flex-wrap: nowrap; }
-.we-sctl .we-range { max-width: 320px; }
+.we-sctl .we-range { max-width: 300px; }
 .we-surface-list { display: flex; flex-direction: column; width: 100%; }
 .we-surface-row { display: grid; grid-template-columns: minmax(150px, 32%) 1fr; align-items: center; gap: 20px; padding: 9px 0; }
 .we-surface-row + .we-surface-row { border-top: 1px solid var(--b3-border-color); }
 .we-surface-row .we-range { max-width: 200px; min-width: 140px; }
+
+/* —— 关于页 —— */
+.we-about { display: flex; flex-direction: column; min-height: 340px; }
+.we-about-hero { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; text-align: center; }
+.we-about-icon { width: 96px; height: 96px; border-radius: 12px; }
+.we-about-title { font-weight: 600; }
+.we-about-desc { opacity: .75; max-width: 420px; line-height: 1.6; }
+.we-about-meta { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; padding-top: 10px; }
+.we-about-links { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 12px 0 4px; }
 
 /* —— 快速调节面板 —— */
 .we-quick { padding: 8px 6px 6px; }

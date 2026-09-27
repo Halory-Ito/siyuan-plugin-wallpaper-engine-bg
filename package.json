@@ -2,7 +2,11 @@
   "name": "wallpaper-engine-bg",
   "version": "0.5.1",
   "private": true,
-  "description": "SiYuan plugin: Wallpaper Engine wallpapers as background with adjustable mask brightness and blur",
+  "description": "SiYuan plugin: images, videos or web pages from your own gallery or URL as the background, with adjustable mask brightness, background blur and panel transparency",
+  "author": {
+    "name": "Halory",
+    "url": "https://github.com/Halory-Ito"
+  },
   "type": "module",
   "scripts": {
     "build": "node scripts/gen-icons.mjs && node build.mjs",

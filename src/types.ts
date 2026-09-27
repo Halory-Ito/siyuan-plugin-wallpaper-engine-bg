@@ -1,24 +1,21 @@
-export type WallpaperType = "video" | "web" | "image" | "scene" | "application" | "unknown";
+export type WallpaperType = "video" | "web" | "image" | "unknown";
 
 /**
- * 一条壁纸记录。路径均为本机绝对路径（网络壁纸除外）。
+ * 一条壁纸记录（自定义图库中的一个媒体文件）。路径均为本机绝对路径（网络壁纸除外）。
  */
-export interface WEWallpaper {
+export interface WallpaperItem {
     /** 稳定标识：dir + "||" + entry */
     key: string;
-    /** 工程目录名（或文件名） */
+    /** 文件名 */
     id: string;
     title: string;
     type: WallpaperType;
-    /** 工程目录（网络壁纸时为空） */
+    /** 所在目录（网络壁纸时为空） */
     dir: string;
-    /** 入口文件绝对路径：video/web/image 的媒体或 html；scene/application 时为预览图 */
+    /** 媒体文件绝对路径：video/web/image 的媒体或 html */
     entry: string;
-    /** 预览图绝对路径，可能为空 */
+    /** 预览图绝对路径，可能为空（图片壁纸即自身） */
     preview: string;
-    /** 是否可以直接渲染（scene/application 只能回退到预览图） */
-    supported: boolean;
-    note: "ok" | "preview-only" | "missing-entry";
 }
 
 /** 解析出可直接渲染的壁纸 */
@@ -28,11 +25,18 @@ export interface ResolvedWallpaper {
     kind: "video" | "image" | "web";
     url: string;
     previewUrl: string;
-    /** scene 等回退渲染时为 true */
+    /** 入口文件丢失、回退到预览图渲染时为 true */
     fallback: boolean;
 }
 
 export type FitMode = "cover" | "contain" | "stretch" | "blurfill";
+
+/**
+ * 壁纸来源：
+ *   local —— 使用自定义图库（本机目录中的图片 / 视频 / 网页）
+ *   url   —— 使用网络壁纸 URL
+ */
+export type WallpaperSource = "local" | "url";
 
 /**
  * 界面透明模式：
@@ -67,6 +71,8 @@ export interface PanelBg {
 export interface CommonConfig {
     enabled: boolean;
     /* 壁纸 */
+    /** 壁纸来源：本地图库 / 网络 URL（两套配置各自保留，随时切换） */
+    wallpaperSource: WallpaperSource;
     urlWallpaper: string;
     rotateMinutes: number;
     randomOnStart: boolean;
@@ -98,7 +104,7 @@ export interface CommonConfig {
 /** 仅本机生效的设置（绝对路径不跨设备同步） */
 export interface DeviceConfig {
     hostId: string;
-    /** 壁纸库根目录，例如 workshop/content/431960 */
-    workshopDirs: string[];
-    wallpaper: WEWallpaper | null;
+    /** 自定义图库目录（每项为一个本地目录） */
+    galleryDirs: string[];
+    wallpaper: WallpaperItem | null;
 }

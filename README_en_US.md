@@ -1,28 +1,30 @@
-# Wallpaper Engine Background (SiYuan Plugin)
+# Wallpaper Background (SiYuan Plugin)
 
 <p align="center">
-  <img src="./cover.jpg" alt="Wallpaper Engine wallpaper as the SiYuan background" width="720">
+  <img src="./cover.jpg" alt="Custom wallpaper as the SiYuan background" width="720">
 </p>
 
-Show **Wallpaper Engine** wallpapers (video / web / image) as the background of SiYuan,
+Cover the whole SiYuan note with images, videos or web pages from **your own gallery** (local folders) or **a URL**,
 plus an adjustable **mask** layer: tune the **brightness (mask opacity)** and **background blur**
 with live sliders while keeping your notes readable.
+
+The UI can follow along: **surface background colors (panel transparency)** and a **code block background**
+blend the SiYuan interface into the wallpaper.
 
 中文: [README.md](./README.md)
 
 ## Features
 
-- Reads your local Wallpaper Engine library (Steam workshop + local projects), no upload needed
-  - Auto detects Steam libraries (parses `libraryfolders.vdf`; extra drives, Linux and macOS paths supported)
-  - Or point it at any folder: `workshop/content/431960`, `431960`, or a single project folder all work
-  - Loose media files (mp4 / webm / png / jpg / gif...) without `project.json` are supported too
+- Switch the wallpaper source at any time: **local gallery / network URL** each keep their own settings, and one switch in the settings page flips between them — no need to clear the URL to use local wallpapers
+- Custom gallery: point it at local folders and read wallpapers straight from disk, no upload needed (desktop only)
+  - Recursive folder scanning (3 levels by default); loose media files (mp4 / webm / png / jpg / gif...) just work
+  - Or set a wallpaper URL (any http/https video, image or web page), also usable on browser frontends
 - Wallpaper types
-  | Wallpaper Engine type | Support |
+  | Type | Support |
   | --- | --- |
-  | `video` (mp4 / webm...) | ✅ looped playback, volume, rate, pause when hidden |
-  | `web` (html project) | ✅ served by a built-in local server so relative assets resolve |
-  | `image` / loose images | ✅ static background |
-  | `scene` / `application` | ⚠️ packed `.pkg` projects cannot run in the browser; `preview.jpg` is used instead |
+  | Video (mp4 / webm...) | ✅ looped playback, volume, rate, pause when hidden |
+  | Web (html project) | ✅ served by a built-in local server so relative assets resolve |
+  | Image | ✅ static background |
 - **Mask**: color (black to darken / white to lighten) + opacity = brightness control
 - **Background blur**: 0–40px gaussian blur with automatic edge compensation
 - Four fit modes: **Fit + blurred fill (default)** / cover / contain / stretch;
@@ -37,12 +39,13 @@ with live sliders while keeping your notes readable.
   - Its own section in the settings page with a swatch palette: transparent / follow theme / dark / slate / black / light gray / cream / white
   - Custom light + dark colors and an opacity slider for fine tuning; picking a swatch while opacity is 0% raises it to 85% so the change is visible
   - Inline code shares the same background
-- **Minimal settings page**: grouped sections with hairline dividers (no cards or boxes), changes apply live,
-  one-click restore to defaults; the defaults are a tuned configuration (transparent panels, 4px blur, 0.4 brightness, 2 saturation)
+- **Settings page laid out like [background-cover](https://github.com/HowcanoeWang/siyuan-plugin-background-cover)**:
+  a left tab sidebar plus a scrolling content pane, with General / Wallpaper sources / Picture & mask /
+  UI background / Playback / Advanced / About; every setting is one row of "title + control",
+  changes apply live, and defaults can be restored in one click
 - Plus a whole-UI opacity mode (works with every theme) and an off switch
 - Wallpaper library picker with thumbnails and type badges
 - Random rotation, random on start, previous / next
-- Wallpaper URL source (http/https video, image or web page) for browser frontends
 - Quick adjust panel + top bar icon + commands (hotkey assignable), zh_CN / en_US UI
 
 ## Install
@@ -64,66 +67,59 @@ Copy `dist/` into your workspace plugin folder and rename it to `wallpaper-engin
 └── i18n/
 ```
 
-Restart SiYuan and enable the plugin.
+Restart SiYuan (or refresh in Settings → Bazaar → Downloaded) and enable the plugin.
 
-You can also build a bazaar-compliant `package.zip` (files live at the zip root, so extracting it
-gives you the plugin folder directly) for a GitHub Release:
+You can also build the marketplace-ready `package.zip` (files at the zip root, unpacks straight into the plugin folder)
+for a GitHub Release:
 
 ```bash
-npm run package    # build + write package.zip
+npm run package    # build + produce package.zip
 ```
 
 ## Usage
 
 1. **Top bar icon**
-   - Left click: quick adjust panel (mask opacity / blur / brightness / saturation / UI transparency + wallpaper nav)
-   - Right click: library / random / toggle
-2. **Settings (top bar right-click menu / plugin settings button)**
-   - Minimal layout: General, Wallpaper source, Picture & mask, Backgrounds, Code block background, Playback, Misc
-   - Wallpaper folders (empty = auto detect) → "Auto detect" → "Rescan" → "Pick wallpaper..."
-   - Mask: enable, color, opacity (brightness)
-   - Background blur, brightness, saturation
-   - Backgrounds: mode (panel backgrounds / whole-UI opacity / off) + per-surface color and opacity + overall strength
-   - Code block background: swatch palette + custom light / dark colors + opacity
-   - Playback: mute / volume / rate / pause when hidden / mute web wallpapers
-   - Rotation interval, random on start
-3. **Command palette** (bind hotkeys in Settings → Hotkeys):
-   toggle / quick panel / library / random / next / previous / darken / lighten / blur more / less
+   - Left click: quick adjust panel (mask opacity / blur / brightness / saturation / UI transparency + switching wallpapers)
+   - Right click: library / random / toggle background
+2. **Settings (top bar icon context menu / plugin settings button)**: switch sections in the left tab sidebar
+   - **General**: toggle, random rotation interval, random on start, current wallpaper, quick adjust entry
+   - **Wallpaper sources**: the "Wallpaper source" switch picks the local gallery or a network URL; local mode configures the gallery folders (one per line) and "Rescan", URL mode takes a URL — the other set of settings is kept, so you can switch back anytime
+   - **Picture & mask**: fit mode / position / blur / brightness / saturation; mask (enable, color, opacity)
+   - **UI background**: mode (panel background / whole UI opacity / off) + per-surface colors and opacity + overall strength + code block background
+   - **Playback**: mute / volume / rate / pause when hidden / mute web wallpapers
+   - **Advanced**: restore defaults, config storage status
+3. **Command palette** (bind hotkeys in Settings → Keymap)
+   Toggle / quick adjust / library / random / previous / next / darken / lighten mask / more / less blur
 
-### Mask recipes
+### How to use the mask
 
-- Readable notes: black mask at 30%–60% opacity + 8–20px blur
-- Bright and airy: white mask at 10%–30% opacity + 0–8px blur
+- For readable body text: pick the **black mask**, drag "mask opacity" to 30%–60%, and add a little "background blur" (8–20px)
+- For a bright, airy look: pick the **white mask** at 10%–30% opacity with 0–8px blur
+- Mask opacity and blur can both be nudged any time via hotkey-bound commands
 
 ## How it works
 
-- The background layer (wallpaper + mask) is mounted under `<html>` (outside `<body>`),
-  below every UI element and unaffected by UI transparency
-- The wallpaper layer carries the `blur / brightness / saturate` filters; the mask is a plain color overlay
-- The wallpaper layer carries the `blur / brightness / saturate` filters; the mask is a plain color overlay;
-  in blurred-fill mode an extra blurred copy fills the background while the foreground uses `object-fit: contain`
-- Surface backgrounds are applied with `background-color ... !important` on the matching structure
-  (0% opacity still emits `transparent`, otherwise the opaque theme background remains).
-  Selectors follow SiYuan's `app/src/assets/scss/business/_layout.scss`:
-  content = `.layout-tab-container`, sidebar = `.layout__dockl/r/b`, tab bar = `.layout-tab-bar`, editor = `.protyle`.
-  Nested elements inside the same surface are flattened to transparent so tints never stack up;
-  theme colors emit `color-mix(...)` plus an rgba fallback so dark / light mode adapts automatically;
-  custom colors emit rgba and may use a separate dark-mode color
-- On desktop a tiny read-only static server is started on `127.0.0.1` (Node `http`):
-  - loopback only, random secret in the URL, path traversal protected, serves only scanned wallpaper folders
-  - lets web wallpaper relative js / css / textures load; videos support Range requests
-  - injects a thin compatibility shim into html wallpapers (`window.wallpaperPropertyListener`,
-    `wallpaperRegisterAudioListener`, ...) and can mute their audio
-- Settings are stored in the plugin storage: display settings in `local.json` (syncs across devices),
-  machine paths in `device-<hostname>.json` so devices never overwrite each other
+- The background layer (wallpaper + mask) lives under `<html>` but outside `<body>`, below all UI, so UI transparency does not affect it
+- The wallpaper layer carries the `blur / brightness / saturate` filters while the mask is a plain `opacity` overlay;
+  blurred fill adds one blurred copy of the same media behind a `object-fit: contain` foreground
+- Surface backgrounds override the matching elements with `background-color ... !important`
+  (even at 0% opacity `transparent` is emitted, otherwise the opaque theme background would remain); selectors follow
+  SiYuan `app/src/assets/scss/business/_layout.scss`: content = `.layout-tab-container`, docks = `.layout__dockl/r/b`,
+  tab bar = `.layout-tab-bar`, editor = `.protyle`. Nested elements are flattened to avoid double tinting;
+  theme colors use `color-mix(...)` with an rgba fallback and adapt to dark / light mode automatically,
+  custom colors emit rgba with an optional separate dark-mode color
+- On desktop a **read-only static server** runs on `127.0.0.1` via Node's `http` module:
+  - Loopback only, random secret in the URL, path traversal checks; only scanned gallery folders are reachable
+  - Lets web wallpapers resolve relative js / css / textures; videos support Range requests
+  - Optionally mutes audio inside web wallpapers (a tiny shim also covers dynamically inserted video / audio elements)
+- Config lives in plugin storage: display settings go to `local.json` (synced across devices), local paths to `device-<hostname>.json`
 
-## Limitations
+## Known limitations
 
-- `scene` / `application` wallpapers are packed `.pkg` projects and fall back to their `preview.jpg`
-- Web wallpaper audio is played by the page itself; the shim can only mute it best-effort
-- Browser / mobile frontends have no Node access: use the wallpaper URL source instead
-- Nested surfaces (document tree / outline inside the sidebar, editor inside the content area) stack on top of outer ones;
-  the defaults are tuned so the stack looks like a single layer - set an inner one to 0% to keep it uniform
+- Web wallpaper audio is played by the page itself; the mute shim does its best (some custom audio output cannot be intercepted)
+- Browser / mobile frontends have no Node access and cannot scan local galleries; switch the wallpaper source to "Network URL" instead
+- Nested surfaces (document tree / outline live inside the sidebar, the editor inside the content area) stack their
+  backgrounds on top of the container; the defaults are tuned to look like a single layer — set the inner one to 0% to keep it consistent
 
 ## Development
 
@@ -131,12 +127,36 @@ npm run package    # build + write package.zip
 npm i
 npm run build     # bundle to dist/
 npm run watch     # rebuild on change
-npm run package   # build + write package.zip (for releases)
+npm run package   # build + produce package.zip (for releases)
 npm run test      # smoke tests: smoke + ui-smoke
 npx tsc --noEmit  # type check
 ```
 
-Version history: [CHANGELOG.md](./CHANGELOG.md).
+See [CHANGELOG.md](./CHANGELOG.md) for the version history.
+
+Code layout:
+
+```text
+src/
+├── index.ts      plugin entry: lifecycle, commands, wallpaper scheduling
+├── scan.ts       custom gallery folder scanning
+├── server.ts     local read-only static server (Range / html mute shim)
+├── renderer.ts   background layer: wallpaper + mask + UI transparency
+├── settings.ts   settings page (left tab sidebar + content pane)
+├── quick.ts      quick adjust panel
+├── library.ts    wallpaper library picker
+├── store.ts      config persistence (shared / per-device settings)
+├── node.ts       Node capability detection and fallbacks
+└── ui.ts / uistyle.ts / i18n.ts / icon.ts
+```
+
+## Author
+
+- **Halory** · [github.com/Halory-Ito](https://github.com/Halory-Ito)
+
+## Credits
+
+- The settings page layout follows [siyuan-plugin-background-cover](https://github.com/HowcanoeWang/siyuan-plugin-background-cover)
 
 ## License
 

@@ -2,7 +2,7 @@ import { Plugin, Setting, showMessage } from "siyuan";
 import type { TPluginDataChangeReason } from "siyuan";
 import { BgRenderer } from "./renderer";
 import { LocalServer } from "./server";
-import { VIDEO_EXT, detectRoots, scanRoots } from "./we";
+import { VIDEO_EXT, scanRoots } from "./scan";
 import { loadState, onExternalDataChange, saveState, state, persistNow } from "./store";
 import { openSettingsDialog } from "./settings";
 import { openQuickPanel } from "./quick";
@@ -12,7 +12,7 @@ import { setI18n, t } from "./i18n";
 import { iconWeBg } from "./icon";
 import { fileUrl, isDesktop } from "./node";
 import type { Host } from "./host";
-import type { ResolvedWallpaper, WEWallpaper } from "./types";
+import type { ResolvedWallpaper, WallpaperItem } from "./types";
 
 const URL_VIDEO_EXT = new Set([".mp4", ".webm", ".m4v", ".mov", ".avi", ".ogv", ".mkv"]);
 const URL_IMAGE_EXT = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".avif"]);
@@ -20,7 +20,7 @@ const URL_IMAGE_EXT = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp",
 export default class WallpaperEngineBg extends Plugin implements Host {
     private renderer = new BgRenderer();
     private server: LocalServer | null = null;
-    private libCache: WEWallpaper[] = [];
+    private libCache: WallpaperItem[] = [];
     private rotateTimer: ReturnType<typeof setInterval> | null = null;
     private onVisibility = (): void => this.syncVisibility();
 
@@ -47,7 +47,8 @@ export default class WallpaperEngineBg extends Plugin implements Host {
 
         if (state.common.enabled) {
             await this.refreshLibrary();
-            if (state.common.randomOnStart) this.randomWallpaper();
+            // 网络来源只有一张图，随机没有意义（也不该在这里弹提示）
+            if (state.common.randomOnStart && state.common.wallpaperSource === "local") this.randomWallpaper();
         }
         // 启动时完整套用一次配置（含界面透明模式），否则重启后 panels/opacity 要等到
         // 用户动一下设置才会生效 —— 看起来就是「设置没存下来」。
@@ -174,7 +175,7 @@ export default class WallpaperEngineBg extends Plugin implements Host {
         this.startRotation();
     }
 
-    async library(): Promise<WEWallpaper[]> {
+    async library(): Promise<WallpaperItem[]> {
         if (this.libCache.length === 0) await this.refreshLibrary();
         return this.libCache;
     }
@@ -185,14 +186,7 @@ export default class WallpaperEngineBg extends Plugin implements Host {
                 this.libCache = [];
                 return 0;
             }
-            if (state.device.workshopDirs.length === 0) {
-                const detected = detectRoots();
-                if (detected.length > 0) {
-                    state.device.workshopDirs = detected;
-                    saveState();
-                }
-            }
-            this.libCache = await scanRoots(state.device.workshopDirs);
+            this.libCache = await scanRoots(state.device.galleryDirs);
             return this.libCache.length;
         } catch (err) {
             console.warn("[we-bg] scan library failed:", err);
@@ -201,22 +195,34 @@ export default class WallpaperEngineBg extends Plugin implements Host {
         }
     }
 
-    currentWallpaper(): WEWallpaper | null {
+    currentWallpaper(): WallpaperItem | null {
         return state.device.wallpaper;
     }
 
-    pickWallpaper(wp: WEWallpaper): void {
+    /** 当前生效壁纸的显示名；网络来源时是 URL，未设置时为空字符串 */
+    currentTitle(): string {
+        if (state.common.wallpaperSource === "url") return state.common.urlWallpaper.trim();
+        return state.device.wallpaper?.title ?? "";
+    }
+
+    pickWallpaper(wp: WallpaperItem): void {
         state.device.wallpaper = wp;
+        // 从壁纸库里挑图 = 明确要用本地壁纸，顺带把来源切回本地（否则点了没反应）
+        state.common.wallpaperSource = "local";
         saveState();
-        if (!wp.supported) {
-            showMessage(t("libSceneNote"), 4000);
-        }
         this.applyConfig();
     }
 
+    /** 随机 / 上下一张只作用于本地图库；网络来源时给出提示，避免命令看起来没反应 */
+    private requireLocalSource(): boolean {
+        if (state.common.wallpaperSource === "local") return true;
+        showMessage(t("msgSourceUrl"), 3000);
+        return false;
+    }
+
     randomWallpaper(): void {
-        const pool = this.libCache.filter((wp) => wp.supported);
-        const list = pool.length > 0 ? pool : this.libCache;
+        if (!this.requireLocalSource()) return;
+        const list = this.libCache;
         if (list.length === 0) {
             showMessage(t("msgNoLibrary"), 3000);
             return;
@@ -228,6 +234,7 @@ export default class WallpaperEngineBg extends Plugin implements Host {
     }
 
     stepWallpaper(step: number): void {
+        if (!this.requireLocalSource()) return;
         const list = this.libCache.length > 0 ? this.libCache : [];
         if (list.length === 0) {
             showMessage(t("msgNoLibrary"), 3000);
@@ -259,7 +266,7 @@ export default class WallpaperEngineBg extends Plugin implements Host {
         return isDesktop();
     }
 
-    previewUrl(wp: WEWallpaper): string {
+    previewUrl(wp: WallpaperItem): string {
         if (!wp.preview) return "";
         return this.toUrl(wp.preview, wp.dir);
     }
@@ -282,13 +289,14 @@ export default class WallpaperEngineBg extends Plugin implements Host {
 
     private resolveCurrent(): ResolvedWallpaper | null {
         const cfg = state.common;
-        if (cfg.urlWallpaper) {
-            const kind = kindFromPath(cfg.urlWallpaper);
+        if (cfg.wallpaperSource === "url") {
+            const url = cfg.urlWallpaper.trim();
+            if (!url) return null;
             return {
-                key: `url||${cfg.urlWallpaper}`,
-                title: cfg.urlWallpaper,
-                kind,
-                url: cfg.urlWallpaper,
+                key: `url||${url}`,
+                title: url,
+                kind: kindFromPath(url),
+                url,
                 previewUrl: "",
                 fallback: false,
             };
@@ -297,9 +305,9 @@ export default class WallpaperEngineBg extends Plugin implements Host {
         const wp = state.device.wallpaper;
         if (!wp) return null;
 
-        // scene/application 只能回退到预览图；入口文件丢失时同样回退
+        // 入口文件丢失时回退到预览图（例如旧版本存下的场景类壁纸记录）
         const entryMissing = wp.entry ? !isDesktop() || !fileExists(wp.entry) : true;
-        const usePreview = (!wp.supported || entryMissing) && !!wp.preview;
+        const usePreview = entryMissing && !!wp.preview;
         const target = usePreview ? wp.preview : wp.entry;
         if (!target) return null;
 
@@ -317,14 +325,14 @@ export default class WallpaperEngineBg extends Plugin implements Host {
             kind,
             url: this.toUrl(target, wp.dir, kind === "web"),
             previewUrl: wp.preview ? this.toUrl(wp.preview, wp.dir) : "",
-            fallback: usePreview && !wp.supported,
+            fallback: usePreview,
         };
     }
 
     private toUrl(abs: string, baseDir: string, web = false): string {
         if (/^https?:\/\//i.test(abs)) return abs;
         if (this.server) {
-            const query = web ? { weMute: state.common.webMuted ? "1" : "0" } : undefined;
+            const query = web ? { mute: state.common.webMuted ? "1" : "0" } : undefined;
             return this.server.urlForFile(abs, baseDir || undefined, query);
         }
         return fileUrl(abs);
@@ -335,7 +343,8 @@ export default class WallpaperEngineBg extends Plugin implements Host {
     private startRotation(): void {
         this.stopRotation();
         const minutes = state.common.rotateMinutes;
-        if (!state.common.enabled || minutes <= 0) return;
+        // 网络来源固定一张图，轮换无意义（也会把来源悄悄切走）
+        if (!state.common.enabled || minutes <= 0 || state.common.wallpaperSource !== "local") return;
         this.rotateTimer = setInterval(() => this.randomWallpaper(), minutes * 60000);
     }
 

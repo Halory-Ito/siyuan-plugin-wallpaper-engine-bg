@@ -1,15 +1,13 @@
 import { Dialog, showMessage } from "siyuan";
 import { t, tArgs } from "./i18n";
 import type { Host } from "./host";
-import type { WEWallpaper } from "./types";
+import type { WallpaperItem } from "./types";
 import { buttonEl, el } from "./ui";
 
 const TYPE_KEY: Record<string, string> = {
     video: "libTypeVideo",
     web: "libTypeWeb",
     image: "libTypeImage",
-    scene: "libTypeScene",
-    application: "libTypeApplication",
     unknown: "libTypeUnknown",
 };
 
@@ -66,7 +64,7 @@ export function openLibrary(host: Host): void {
     void render();
 }
 
-function buildCard(host: Host, wp: WEWallpaper, current: WEWallpaper | null, close: () => void): HTMLElement {
+function buildCard(host: Host, wp: WallpaperItem, current: WallpaperItem | null, close: () => void): HTMLElement {
     const thumb = el("div", { class: "we-thumb" });
     const previewUrl = host.previewUrl(wp);
     if (previewUrl) {
@@ -81,15 +79,11 @@ function buildCard(host: Host, wp: WEWallpaper, current: WEWallpaper | null, clo
     const title = el("div", { class: "we-card-title", title: wp.dir || wp.entry }, wp.title);
     const meta = el("div", { class: "we-card-meta" }, tag);
 
-    if (!wp.supported) {
-        meta.append(el("span", { class: "we-tag we-tag--warn" }, t("libPreviewOnly")));
-    }
-
     const card = el(
         "div",
         {
             class: "we-card",
-            title: wp.supported ? wp.title : t("libSceneNote"),
+            title: wp.title,
             onclick: () => {
                 host.pickWallpaper(wp);
                 showMessage(tArgs("libApplied", { title: wp.title }), 3000);
@@ -101,6 +95,5 @@ function buildCard(host: Host, wp: WEWallpaper, current: WEWallpaper | null, clo
         meta,
     );
     if (current && current.key === wp.key) card.classList.add("we-card--current");
-    if (!wp.supported) card.classList.add("we-card--dim");
     return card;
 }

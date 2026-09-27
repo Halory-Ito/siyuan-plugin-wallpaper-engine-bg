@@ -13,7 +13,7 @@ export function openQuickPanel(host: Host): void {
 
     const body = el("div", { class: "we-quick" });
 
-    const titleEl = el("div", { class: "we-quick-title" }, host.currentWallpaper()?.title ?? t("qpNoWallpaper"));
+    const titleEl = el("div", { class: "we-quick-title" }, host.currentTitle() || t("qpNoWallpaper"));
 
     const row = (label: string, control: HTMLElement): HTMLElement =>
         el("div", { class: "we-row" }, el("span", { class: "we-label" }, label), control);

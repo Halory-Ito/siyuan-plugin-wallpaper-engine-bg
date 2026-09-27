@@ -13,17 +13,17 @@
     "desktop-window",
     "browser-desktop"
   ],
-  "author": "open-source",
+  "author": "Halory",
   "url": "https://github.com/Halory-Ito/siyuan-plugin-wallpaper-engine-bg",
   "icon": "icon.png",
   "preview": "preview.png",
   "displayName": {
-    "default": "Wallpaper Engine BG",
-    "zh_CN": "Wallpaper Engine 壁纸"
+    "default": "Wallpaper Background",
+    "zh_CN": "壁纸背景"
   },
   "description": {
-    "default": "Show Wallpaper Engine wallpapers as the SiYuan background, with a mask to tune brightness and blur.",
-    "zh_CN": "在思源笔记中显示 Wallpaper Engine 壁纸作为背景，支持遮罩调节亮度与背景模糊度"
+    "default": "Images, videos or web pages from your own gallery or URL as the SiYuan background, with adjustable mask brightness, background blur and panel transparency.",
+    "zh_CN": "用自定义图库或网络 URL 中的图片 / 视频 / 网页铺满思源笔记作为背景，可调节遮罩明暗、背景模糊与界面面板透明"
   },
   "readme": {
     "default": "README.md",
@@ -32,12 +32,13 @@
   },
   "keywords": [
     "wallpaper",
-    "wallpaper engine",
     "background",
+    "gallery",
     "mask",
     "blur",
     "壁纸",
     "背景",
+    "图库",
     "遮罩",
     "模糊"
   ]

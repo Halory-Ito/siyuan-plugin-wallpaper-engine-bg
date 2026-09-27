@@ -1,6 +1,6 @@
 # 更新日志
 
-**Wallpaper Engine 壁纸背景**（SiYuan 插件）的所有重要变更都记录在此文件。
+**壁纸背景**（SiYuan 插件）的所有重要变更都记录在此文件。
 
 版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)，以 `plugin.json` 与 `package.json` 中的
 `version` 为准（两者保持一致）；每个版本对应 GitHub Release 上的一个 `package.zip`。
@@ -9,6 +9,38 @@
 > 0.4.1 条目是当时的功能快照，不含更早版本的逐条变更。
 
 ## [未发布]
+
+### 新增
+
+- **壁纸来源开关**：本地图库与网络 URL 两套配置各自保留，设置页「壁纸来源」一个开关即可切换；
+  之前是「URL 非空就用 URL」，想让本地壁纸生效必须先把 URL 清空，现在不再互相覆盖。
+  - 对应新配置字段 `wallpaperSource`（`local` / `url`，默认 `local`）；旧配置没有该字段时按旧规则迁移：
+    填过 `urlWallpaper` 的继续用 URL，否则用本地图库。
+  - 设置页只展示当前来源的控件（本地：图库目录 + 重新扫描；网络：URL 输入），另一套配置不受影响。
+  - 从壁纸库选图、随机 / 上一张 / 下一张只作用于本地图库：选图会自动把来源切回本地，
+    网络来源时随机 / 上下张给出提示而不是默默无反应（轮换定时器也会跳过网络来源）。
+  - 「当前壁纸」与快速调节面板的标题在网络来源时显示 URL。
+
+### 变更
+
+- **设置页改版**：布局参考 background-cover（[HowcanoeWang/siyuan-plugin-background-cover](https://github.com/HowcanoeWang/siyuan-plugin-background-cover)），
+  改为「左侧标签栏 + 右侧内容区」结构：全局设置 / 壁纸来源 / 画面与遮罩 / 界面背景 / 播放 / 高级设置 / 关于 七个分区，
+  每条设置一行「标题 + 控件」，所有改动仍实时生效。
+- **设置页不再显示小字说明**：每行只留标题与控件，界面更清爽（原描述文案已从词条中移除）。
+- **介绍文案改为「自定义图库 / 网络 URL」表述**，不再出现 Wallpaper Engine；关于页显示作者
+  **Halory**（[github.com/Halory-Ito](https://github.com/Halory-Ito)）与 GitHub 仓库链接。
+- 本机配置字段 `workshopDirs` 更名为 `galleryDirs`（读取旧配置时自动迁移）。
+- 共享配置新增 `wallpaperSource`，决定实际使用本地图库还是网络 URL。
+- `plugin.json` 的 `author` 由占位值改为 `Halory`，展示名改为「壁纸背景 / Wallpaper Background」。
+- 设置页不再提供 Wallpaper Engine 目录「自动探测」，图库目录需手动填写。
+
+### 移除
+
+- **不再支持 Wallpaper Engine**（在思源里的实际效果不佳）：移除 Steam / Wallpaper Engine 目录自动探测、
+  `project.json` 工程解析、scene / application 类型及其预览图回退，以及网页壁纸的 `window.wallpaperXxx` 兼容垫片。
+- 保留并继续支持的非 Wallpaper Engine 功能：自定义图库（本地目录中的图片 / 视频 / 网页）、网络壁纸 URL、
+  遮罩 / 模糊 / 亮度 / 饱和度、界面透明（面板背景 / 整体透明）、代码块背景、播放控制、随机轮换、
+  快速调节面板与壁纸库选择器。
 
 ### 修复
 
@@ -26,6 +58,8 @@
 ### 测试
 
 - ui-smoke 新增回归：启动时套用已存的 panels 配置、关闭状态隐藏背景层且不写盘。
+- ui-smoke 新增壁纸来源回归：`url` 来源渲染网络壁纸、`local` 来源在已填 URL 时仍优先本地图库、
+  旧配置（无 `wallpaperSource`）迁移后保持原行为、设置页开关切换后立即生效并持久化。
 
 ## [0.5.1] - 2026-09-24
 

@@ -63,7 +63,21 @@ try {
 
     plugin.openSetting();
     assert(document.querySelector(".we-settings"), "settings page rendered");
-    assert(document.querySelectorAll(".we-sec").length >= 5, "settings sections rendered");
+    assert(document.querySelectorAll(".we-tab-item").length >= 5, "settings tab sidebar rendered");
+    assert(
+        document.querySelectorAll(".we-pane").length === document.querySelectorAll(".we-tab-item").length,
+        "every tab owns a pane"
+    );
+    assert(document.querySelector(".we-tab-item--on") && document.querySelector(".we-pane--on"), "active tab and pane highlighted");
+    // 切换标签：高亮跟着点选走，且对应内容真的显示出来
+    const tabs = [...document.querySelectorAll(".we-settings .we-tab-item")];
+    tabs[1].dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+    const tabsAfter = [...document.querySelectorAll(".we-settings .we-tab-item")];
+    assert(tabsAfter[1].classList.contains("we-tab-item--on"), "clicking a tab activates it");
+    assert(
+        [...document.querySelectorAll(".we-settings .we-pane")][1].classList.contains("we-pane--on"),
+        "clicking a tab shows its pane"
+    );
     assert(document.querySelector(".we-surface-list .we-surface-row"), "surface rows rendered");
     assert(
         ![...document.querySelectorAll(".we-surface-list .we-surface-row .we-slabel")].some((n) => n.textContent?.includes("sfCode")),
@@ -154,7 +168,7 @@ try {
         const root = [...document.querySelectorAll(".we-settings")].pop();
         const rowOf = (key) =>
             [...root.querySelectorAll(".we-srow")].find((r) => r.querySelector(".we-slabel")?.textContent === key);
-        return { slider: (key) => rowOf(key)?.querySelector('input[type="range"]'), sliders: (key) => [...(rowOf(key)?.querySelectorAll('input[type="range"]') ?? [])] };
+        return { slider: (key) => rowOf(key)?.querySelector('input[type="range"]'), sliders: (key) => [...(rowOf(key)?.querySelectorAll('input[type="range"]') ?? [])], rowOf, root };
     };
 
     /** 一份「用户调过」的配置：值都不是默认值，方便判断到底读没读到 */
@@ -192,14 +206,18 @@ try {
     await closePlugin();
 
     /** 预置存储：同时写入 device 文件，避免启动时自动探测目录又产生写盘 */
-    const seed = (shape, common = savedCommon()) => {
+    const seed = (shape, common = savedCommon(), device = null) => {
         stub.shape = shape;
         stub.failSaves = 0;
         stub.loads.length = 0;
         stub.saves.length = 0;
         stub.files = {};
         stub.files["local.json"] = common;
-        stub.files[deviceName] = { hostId: "seed", workshopDirs: [path.resolve("tmp-ui-smoke")], wallpaper: null };
+        stub.files[deviceName] = device ?? {
+            hostId: "seed",
+            galleryDirs: [path.resolve("tmp-ui-smoke")],
+            wallpaper: null,
+        };
     };
 
     // 1) 对象形状（内核以 application/json 返回时 fetchPost 直接解析）
@@ -320,6 +338,77 @@ try {
     await sleep(900);
     assert(stub.saves.length === 0, `broken read blocks writes even after a user change (${stub.saves.length} writes)`);
     assert(stub.files["local.json"].blur === 33, "stored config survives a broken read plus a user change");
+
+    // 10) 壁纸来源开关：本地图库与网络 URL 两套配置各自保留，由开关决定用哪一套
+    //     （旧行为是「填了 URL 就优先用 URL」，没法在网络壁纸存在时用本地壁纸）
+    const localDir = path.resolve("tmp-ui-smoke");
+    const localEntry = path.join(localDir, "index.cjs");
+    const localWallpaper = {
+        key: `${localDir}||${localEntry}`,
+        id: "index.cjs",
+        title: "local image",
+        type: "image",
+        dir: localDir,
+        entry: localEntry,
+        preview: "",
+    };
+    const seededDevice = () => ({ hostId: "seed", galleryDirs: [localDir], wallpaper: localWallpaper });
+    const layerImg = () => document.querySelector("#we-bg .we-layer img")?.getAttribute("src") ?? "";
+
+    await closePlugin();
+    seed(
+        "object",
+        savedCommon({ wallpaperSource: "url", urlWallpaper: "https://example.com/net.png" }),
+        seededDevice()
+    );
+    p1 = await freshPlugin();
+    assert(layerImg() === "https://example.com/net.png", `url source renders the network wallpaper (${layerImg()})`);
+
+    await closePlugin();
+    seed(
+        "object",
+        savedCommon({ wallpaperSource: "local", urlWallpaper: "https://example.com/net.png" }),
+        seededDevice()
+    );
+    p1 = await freshPlugin();
+    assert(
+        layerImg().startsWith("http://127.0.0.1") && !layerImg().includes("example.com"),
+        `local source wins over a configured URL wallpaper (${layerImg()})`
+    );
+    // 11) 旧配置迁移：没有来源开关时，填过 URL 的继续用 URL（保持升级前的行为）
+    const legacy = savedCommon({ urlWallpaper: "https://example.com/legacy.png" });
+    delete legacy.wallpaperSource;
+    await closePlugin();
+    seed("object", legacy, seededDevice());
+    p1 = await freshPlugin();
+    assert(layerImg() === "https://example.com/legacy.png", "legacy config with a URL keeps using it after migration");
+
+    // 12) 设置页开关：切换后立即改用另一套来源，并换成对应的控件
+    await closePlugin();
+    seed(
+        "object",
+        savedCommon({ wallpaperSource: "url", urlWallpaper: "https://example.com/net.png" }),
+        seededDevice()
+    );
+    p1 = await freshPlugin();
+    const srcUi = openSettings(p1);
+    const srcSwitch = srcUi.rowOf("stSource")?.querySelector('input[type="checkbox"]');
+    assert(!!srcSwitch?.checked, "source switch reflects the URL source");
+    assert(!!srcUi.rowOf("stUrl"), "URL control shown while the URL source is active");
+    assert(!srcUi.rowOf("stLibrary"), "gallery controls hidden while the URL source is active");
+    srcSwitch.checked = false;
+    srcSwitch.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+    assert(
+        layerImg().startsWith("http://127.0.0.1"),
+        `toggling the switch falls back to the local gallery (${layerImg()})`
+    );
+    assert(!!srcUi.rowOf("stLibrary"), "gallery controls appear after switching to the local source");
+    assert(!srcUi.rowOf("stUrl"), "URL control disappears after switching to the local source");
+    await sleep(500);
+    assert(
+        stub.saves.some((s) => s.name === "local.json" && s.data.wallpaperSource === "local"),
+        "source switch is persisted"
+    );
 
     await closePlugin();
 } catch (err) {

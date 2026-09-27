@@ -14,7 +14,7 @@ globalThis.window = { require };
 
 // 1. 打包被测模块（它们通过 window.require 取 Node 模块）
 await build({
-    entryPoints: ["src/we.ts", "src/server.ts", "src/renderer.ts", "src/store.ts"],
+    entryPoints: ["src/scan.ts", "src/server.ts", "src/renderer.ts", "src/store.ts"],
     outdir: "tmp-smoke",
     outExtension: { ".js": ".cjs" },
     bundle: true,
@@ -22,12 +22,12 @@ await build({
     platform: "node",
     logLevel: "error",
 });
-const { scanRoots } = require(path.resolve("tmp-smoke/we.cjs"));
+const { scanRoots } = require(path.resolve("tmp-smoke/scan.cjs"));
 const { LocalServer } = require(path.resolve("tmp-smoke/server.cjs"));
 const { buildPanelCss, SURFACE_SELECTORS } = require(path.resolve("tmp-smoke/renderer.cjs"));
 const { defaultCommon } = require(path.resolve("tmp-smoke/store.cjs"));
 
-// 2. 伪造一个 Wallpaper Engine 创意工坊目录
+// 2. 伪造一个自定义图库目录（散装媒体文件，按目录组织）
 const root = mkdtempSync(path.join(tmpdir(), "we-bg-"));
 const w = (rel, content) => {
     const p = path.join(root, rel);
@@ -35,19 +35,14 @@ const w = (rel, content) => {
     writeFileSync(p, content);
 };
 
-w("431960/111/project.json", JSON.stringify({ type: "video", title: "Video One", file: "clip.mp4", preview: "preview.jpg" }));
-w("431960/111/clip.mp4", "fake video bytes");
-w("431960/111/preview.jpg", "fake preview");
+w("gallery/clip.mp4", "fake video bytes");
+w("gallery/photo.png", "fake png");
+w("gallery/notes.txt", "not a media file");
 
-w("431960/222/project.json", JSON.stringify({ type: "web", title: "Web One", file: "index.html" }));
-w("431960/222/index.html", "<html><head><title>wp</title></head><body><script src='a.js'></script></body></html>");
-w("431960/222/a.js", "console.log(1)");
+w("gallery/site/index.html", "<html><head><title>wp</title></head><body><script src='a.js'></script></body></html>");
+w("gallery/site/a.js", "console.log(1)");
 
-w("431960/333/project.json", JSON.stringify({ type: "scene", title: "Scene One" }));
-w("431960/333/scene.pkg", "pkg");
-w("431960/333/preview.jpg", "fake preview");
-
-w("myprojects/custom/hello.mp4", "loose video");
+w("gallery/nested/deep/art.jpg", "fake jpg");
 
 // 3. 扫描
 const list = await scanRoots([root]);
@@ -62,25 +57,25 @@ const assert = (cond, msg) => {
 };
 
 assert(list.length === 4, `scan finds 4 wallpapers (got ${list.length})`);
-assert(byTitle["Video One"]?.type === "video" && byTitle["Video One"]?.entry.endsWith("clip.mp4"), "video wallpaper entry resolved");
-assert(byTitle["Web One"]?.type === "web" && byTitle["Web One"]?.entry.endsWith("index.html"), "web wallpaper entry resolved");
-assert(byTitle["Scene One"]?.supported === false && byTitle["Scene One"]?.entry.endsWith("preview.jpg"), "scene wallpaper falls back to preview");
-assert(byTitle["hello"]?.type === "video", "loose media file picked up");
+assert(byTitle["clip"]?.type === "video" && byTitle["clip"]?.entry.endsWith("clip.mp4"), "video wallpaper entry resolved");
+assert(byTitle["index"]?.type === "web" && byTitle["index"]?.entry.endsWith("index.html"), "web wallpaper entry resolved");
+assert(byTitle["photo"]?.type === "image" && byTitle["photo"]?.preview.endsWith("photo.png"), "image wallpaper picked up with itself as preview");
+assert(byTitle["art"]?.type === "image", "nested media file picked up");
 
 // 4. 本地服务器
 const server = new LocalServer();
 assert(await server.start(), "local server starts");
-const htmlUrl = server.urlForFile(byTitle["Web One"].entry, byTitle["Web One"].dir, { weMute: "1" });
+const htmlUrl = server.urlForFile(byTitle["index"].entry, byTitle["index"].dir, { mute: "1" });
 const html = await (await fetch(htmlUrl)).text();
-assert(html.includes("data-we-bg-shim"), "html shim injected");
-assert(htmlUrl.includes("weMute=1"), "mute flag passed via url");
+assert(html.includes("data-bg-shim"), "html shim injected");
+assert(htmlUrl.includes("mute=1"), "mute flag passed via url");
 assert(html.includes("a.js"), "html content served");
 
-const jsUrl = server.urlForFile(path.join(byTitle["Web One"].dir, "a.js"), byTitle["Web One"].dir);
+const jsUrl = server.urlForFile(path.join(byTitle["index"].dir, "a.js"), byTitle["index"].dir);
 const js = await (await fetch(jsUrl)).text();
 assert(js.includes("console.log"), "relative subresource resolvable under project root");
 
-const videoUrl = server.urlForFile(byTitle["Video One"].entry, byTitle["Video One"].dir);
+const videoUrl = server.urlForFile(byTitle["clip"].entry, byTitle["clip"].dir);
 const ranged = await fetch(videoUrl, { headers: { Range: "bytes=0-3" } });
 assert(ranged.status === 206 && (await ranged.text()) === "fake", "video range request works");
 

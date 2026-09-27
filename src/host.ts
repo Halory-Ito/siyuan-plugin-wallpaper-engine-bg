@@ -1,4 +1,4 @@
-import type { WEWallpaper } from "./types";
+import type { WallpaperItem } from "./types";
 
 /** 插件各 UI 模块需要的宿主能力，由 index.ts 的插件类实现 */
 export interface Host {
@@ -11,9 +11,11 @@ export interface Host {
     openLibrary(): void;
     openQuickPanel(): void;
     refreshLibrary(): Promise<number>;
-    library(): Promise<WEWallpaper[]>;
-    pickWallpaper(wp: WEWallpaper): void;
-    currentWallpaper(): WEWallpaper | null;
-    previewUrl(wp: WEWallpaper): string;
+    library(): Promise<WallpaperItem[]>;
+    pickWallpaper(wp: WallpaperItem): void;
+    currentWallpaper(): WallpaperItem | null;
+    /** 当前生效壁纸的显示名（网络来源时为 URL，未设置时为空字符串） */
+    currentTitle(): string;
+    previewUrl(wp: WallpaperItem): string;
     isDesktopEnv(): boolean;
 }

@@ -3,7 +3,7 @@ import { nodeMod } from "./node";
 /**
  * 本地静态服务器。
  *
- * Wallpaper Engine 的 web 壁纸是完整的 html 工程（入口 + 相对路径的 js/css/贴图），
+ * 网页壁纸是完整的 html 工程（入口 + 相对路径的 js/css/贴图），
  * 而思源页面运行在 http 源上，无法直接加载 file:// 子资源。
  * 这里用 Node 的 http 模块在 127.0.0.1 上起一个只读静态服务器，
  * 把壁纸目录映射成 http 链接，相对路径即可正常解析，视频也支持 Range 拖动。
@@ -49,29 +49,14 @@ const MIME: Record<string, string> = {
 };
 
 /**
- * 注入到 web 壁纸 html 中的兼容垫片：
- * 补齐 Wallpaper Engine 的 window.wallpaperXxx 接口（缺失时壁纸脚本会直接报错中断），
- * 以及可选的静音处理。
+ * 注入到网页壁纸 html 中的薄垫片：可选的静音处理
+ * （页面内的 video / audio 全部静音，后续动态插入的也覆盖）。
  */
-const SHIM = `<script data-we-bg-shim>
+const SHIM = `<script data-bg-shim>
 (function () {
     try {
-        window.wallpaperPropertyListener = window.wallpaperPropertyListener || {
-            applyUserProperties: function () {},
-            applyGeneralProperties: function () {},
-            userDirectoryFilesChanged: function () {}
-        };
-        if (typeof window.wallpaperRegisterAudioListener !== "function") {
-            window.wallpaperRegisterAudioListener = function (cb) { window.__weAudioCb = cb; };
-        }
-        if (typeof window.wallpaperRequestAnimation !== "function") {
-            window.wallpaperRequestAnimation = function () { return 0; };
-        }
-        if (typeof window.wallpaperCancelAnimation !== "function") {
-            window.wallpaperCancelAnimation = function () {};
-        }
         var q = new URLSearchParams(location.search);
-        if (q.get("weMute") === "1") {
+        if (q.get("mute") === "1") {
             var mute = function (el) {
                 try {
                     el.muted = true;
@@ -225,7 +210,7 @@ export class LocalServer {
                 "Access-Control-Allow-Origin": "*",
             };
 
-            // web 壁纸 html：注入兼容垫片
+            // 网页壁纸 html：注入静音垫片
             if (ext === ".html" || ext === ".htm") {
                 let html = this.fs.readFileSync(abs, "utf8") as string;
                 html = injectShim(html);
@@ -278,7 +263,7 @@ export class LocalServer {
 }
 
 function injectShim(html: string): string {
-    if (html.includes("data-we-bg-shim")) return html;
+    if (html.includes("data-bg-shim")) return html;
     if (/<head[^>]*>/i.test(html)) {
         return html.replace(/(<head[^>]*>)/i, `$1${SHIM}`);
     }

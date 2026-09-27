@@ -1,0 +1,1 @@
+每一次推送到github之前，都需要把dist中的内容重新打包成package.zip文件（SiYuan笔记插件市场的要求）

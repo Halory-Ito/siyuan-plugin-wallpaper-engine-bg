@@ -22,6 +22,7 @@ export const defaultPanels = (): Record<PanelSurface, PanelBg> => ({
 
 export const defaultCommon = (): CommonConfig => ({
     enabled: true,
+    wallpaperSource: "local",
     urlWallpaper: "",
     rotateMinutes: 0,
     randomOnStart: false,
@@ -46,9 +47,25 @@ export const defaultCommon = (): CommonConfig => ({
 
 export const defaultDevice = (): DeviceConfig => ({
     hostId: hostId(),
-    workshopDirs: [],
+    galleryDirs: [],
     wallpaper: null,
 });
+
+/**
+ * 归一化本机配置（旧版 workshopDirs 迁移为 galleryDirs，顺带剔除脏数据）。
+ * 本机配置不做严格版本迁移，能读多少算多少，缺的用默认值补。
+ */
+export function normalizeDevice(raw: any): DeviceConfig {
+    const merged: any = { ...defaultDevice(), ...(raw ?? {}) };
+    if (!Array.isArray(merged.galleryDirs) && Array.isArray(raw?.workshopDirs)) {
+        merged.galleryDirs = [...raw.workshopDirs];
+    }
+    merged.galleryDirs = Array.isArray(merged.galleryDirs)
+        ? merged.galleryDirs.filter((s: any) => typeof s === "string" && s.trim())
+        : [];
+    merged.hostId = hostId();
+    return merged as DeviceConfig;
+}
 
 export const state: { common: CommonConfig; device: DeviceConfig } = {
     common: defaultCommon(),
@@ -99,6 +116,14 @@ export function normalizeCommon(raw: any): CommonConfig {
     }
     // 旧版 fit=fill 更名为 stretch
     if ((raw as any)?.fit === "fill") merged.fit = "stretch";
+    // 旧配置没有来源开关：当时「填了 URL 就优先用 URL」，迁移时保持一致
+    const source = (raw as any)?.wallpaperSource;
+    merged.wallpaperSource =
+        source === "url" || source === "local"
+            ? source
+            : typeof raw?.urlWallpaper === "string" && raw.urlWallpaper.trim()
+              ? "url"
+              : "local";
     return merged;
 }
 
@@ -192,7 +217,7 @@ export async function loadState(plugin: Plugin): Promise<void> {
 
     const device = await readStored(plugin, deviceFile());
     if (device.kind === "ok" && isConfigLike(device.value)) {
-        state.device = { ...defaultDevice(), ...device.value, hostId: hostId() };
+        state.device = normalizeDevice(device.value);
         baselineDevice = JSON.stringify(state.device);
     } else {
         baselineDevice = null;
@@ -233,7 +258,7 @@ async function refreshBaselines(plugin: Plugin): Promise<boolean> {
             ok = false;
         } else {
             if (r.kind === "ok" && isConfigLike(r.value)) {
-                state.device = { ...defaultDevice(), ...r.value, hostId: hostId() };
+                state.device = normalizeDevice(r.value);
             }
             baselineDevice = JSON.stringify(state.device);
         }
@@ -264,7 +289,7 @@ export async function reloadFromDisk(): Promise<boolean> {
 
     const device = await readStored(p, deviceFile());
     if (device.kind === "ok" && isConfigLike(device.value)) {
-        const next = { ...defaultDevice(), ...device.value, hostId: hostId() };
+        const next = normalizeDevice(device.value);
         if (JSON.stringify(next) !== JSON.stringify(state.device)) changed = true;
         state.device = next;
         baselineDevice = JSON.stringify(state.device);

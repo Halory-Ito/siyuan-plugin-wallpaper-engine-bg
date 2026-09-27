@@ -1,6 +1,5 @@
 import { Dialog, showMessage } from "siyuan";
 import { state, saveState, defaultPanels, resetCommon, reloadFromDisk, storageDiag } from "./store";
-import { detectRoots } from "./we";
 import { t, tArgs } from "./i18n";
 import type { Host } from "./host";
 import type { PanelSurface } from "./types";
@@ -19,13 +18,34 @@ import {
     textEl,
 } from "./ui";
 import type { PaletteSwatch } from "./ui";
+import { name as pkgName, version as pkgVersion } from "../package.json";
+
+const AUTHOR_NAME = "Halory";
+const AUTHOR_URL = "https://github.com/Halory-Ito";
+const PKG_URL = "https://github.com/Halory-Ito/siyuan-plugin-wallpaper-engine-bg";
 
 /**
- * 插件设置页（Minimal 风格自定义对话框）。
+ * 插件设置页。
  *
- * 排版原则：无卡片、无边框块，只用发丝分割线 + 留白分组；
- * 左列标签（小字灰色说明），右列控件右对齐成一列。
+ * 布局参考 background-cover（HowcanoeWang/siyuan-plugin-background-cover）：
+ * 左侧标签栏（图标 + 文字）切换分区，右侧内容区滚动；
+ * 每条设置一行「左侧标题，右侧控件」，改动实时生效。
  */
+
+type TabName = "global" | "sources" | "picture" | "ui" | "playback" | "advanced" | "about";
+
+interface TabDef {
+    name: TabName;
+    /** 思源内置图标 sprite 名 */
+    icon: string;
+    labelKey: string;
+    build: (ctx: Ctx) => HTMLElement;
+}
+
+interface Ctx {
+    host: Host;
+    rerender: () => void;
+}
 
 const SURFACE_ORDER: PanelSurface[] = ["editor", "docTree", "outline", "code", "sidebar", "chrome", "other"];
 
@@ -45,129 +65,52 @@ const SURFACE_KEY: Record<PanelSurface, string> = {
     other: "sfOther",
 };
 
+const TABS: TabDef[] = [
+    { name: "global", icon: "iconEdit", labelKey: "tabGlobal", build: buildGlobalPane },
+    { name: "sources", icon: "iconImage", labelKey: "tabSources", build: buildSourcesPane },
+    { name: "picture", icon: "iconTheme", labelKey: "tabPicture", build: buildPicturePane },
+    { name: "ui", icon: "iconRiffCard", labelKey: "tabUI", build: buildUiPane },
+    { name: "playback", icon: "iconVideo", labelKey: "tabPlayback", build: buildPlaybackPane },
+    { name: "advanced", icon: "iconSettings", labelKey: "tabAdvanced", build: buildAdvancedPane },
+    { name: "about", icon: "iconInfo", labelKey: "tabAbout", build: buildAboutPane },
+];
+
 export function openSettingsDialog(host: Host): void {
     const body = el("div", { class: "we-settings" });
     let dialog: Dialog | null = null;
+    let active: TabName = "global";
 
     /**
      * 整页重建。预设 / 恢复默认会一次性改动很多项，重建可保证所有控件与高亮都跟着变
-     * （否则滑块会停在旧值上，看起来像没生效）。
+     * （否则滑块会停在旧值上，看起来像没生效）；切换标签也走同一条路径。
      */
     const render = (): void => {
-        body.replaceChildren(
-            section(
-                t("secGeneral"),
-                row(t("stEnable"), switchEl(state.common.enabled, (v) => {
-                    state.common.enabled = v;
-                    host.applyLook();
-                }), t("stEnableDesc")),
-                row(t("stRotate"), rangeEl({
-                    min: 0, max: 120, step: 5, value: state.common.rotateMinutes,
-                    format: (v) => (v === 0 ? t("stRotateOff") : tArgs("stRotateMinutes", { minutes: Math.round(v) })),
-                    onInput: (v) => { state.common.rotateMinutes = v; host.applyLook(); },
-                }), t("stRotateDesc")),
-                row(t("stRandomOnStart"), switchEl(state.common.randomOnStart, (v) => {
-                    state.common.randomOnStart = v;
-                    saveState();
-                }), t("stRandomOnStartDesc"))
-            ),
-            buildSourceSection(host),
-            section(
-                t("secPicture"),
-                row(t("stFit"), selectEl(state.common.fit, [
-                    { value: "cover", label: t("stFitCover") },
-                    { value: "blurfill", label: t("stFitBlurfill") },
-                    { value: "contain", label: t("stFitContain") },
-                    { value: "stretch", label: t("stFitStretch") },
-                ], (v) => { state.common.fit = v as typeof state.common.fit; host.applyLook(); }), t("stFitDesc")),
-                row(t("stPosition"), el("div", { class: "we-inline" },
-                    rangeEl({
-                        min: 0, max: 100, step: 1, value: state.common.positionX,
-                        format: (v) => `X ${Math.round(v)}%`,
-                        onInput: (v) => { state.common.positionX = v; host.applyLook(); },
-                    }),
-                    rangeEl({
-                        min: 0, max: 100, step: 1, value: state.common.positionY,
-                        format: (v) => `Y ${Math.round(v)}%`,
-                        onInput: (v) => { state.common.positionY = v; host.applyLook(); },
-                    })
-                ), t("stPositionDesc")),
-                row(t("stBlur"), rangeEl({
-                    min: 0, max: 40, step: 1, value: state.common.blur, format: fmtPx,
-                    onInput: (v) => { state.common.blur = v; host.applyLook(); },
-                }), t("stBlurDesc")),
-                row(t("stBrightness"), rangeEl({
-                    min: 0.2, max: 1.6, step: 0.05, value: state.common.brightness, format: fmtRatio,
-                    onInput: (v) => { state.common.brightness = v; host.applyLook(); },
-                }), t("stBrightnessDesc")),
-                row(t("stSaturate"), rangeEl({
-                    min: 0, max: 2, step: 0.05, value: state.common.saturate, format: fmtRatio,
-                    onInput: (v) => { state.common.saturate = v; host.applyLook(); },
-                }), t("stSaturateDesc")),
-                row(t("stMask"), switchEl(state.common.maskEnabled, (v) => {
-                    state.common.maskEnabled = v;
-                    host.applyLook();
-                }), t("stMaskDesc")),
-                row(t("stMaskColor"), maskColorControl(host), t("stMaskColorDesc")),
-                row(t("stMaskOpacity"), rangeEl({
-                    min: 0, max: 1, step: 0.01, value: state.common.maskOpacity, format: fmtPercent,
-                    onInput: (v) => { state.common.maskOpacity = v; host.applyLook(); },
-                }), t("stMaskOpacityDesc"))
-            ),
-            buildPanelsSection(host, render),
-            buildCodeSection(host),
-            section(
-                t("secPlayback"),
-                row(t("stMute"), switchEl(state.common.muted, (v) => {
-                    state.common.muted = v;
-                    host.applyLook();
-                }), t("stMuteDesc")),
-                row(t("stVolume"), rangeEl({
-                    min: 0, max: 1, step: 0.05, value: state.common.volume, format: fmtPercent,
-                    onInput: (v) => {
-                        state.common.volume = v;
-                        if (v > 0) state.common.muted = false;
-                        host.applyLook();
-                    },
-                }), t("stVolumeDesc")),
-                row(t("stRate"), rangeEl({
-                    min: 0.25, max: 2, step: 0.05, value: state.common.playbackRate, format: fmtRatio,
-                    onInput: (v) => { state.common.playbackRate = v; host.applyLook(); },
-                }), t("stRateDesc")),
-                row(t("stPauseHidden"), switchEl(state.common.pauseWhenHidden, (v) => {
-                    state.common.pauseWhenHidden = v;
-                    host.applyLook();
-                }), t("stPauseHiddenDesc")),
-                row(t("stWebMute"), switchEl(state.common.webMuted, (v) => {
-                    state.common.webMuted = v;
-                    host.applyLook();
-                }), t("stWebMuteDesc"))
-            ),
-            section(
-                t("secMisc"),
-                row(t("stQuick"), el("div", { class: "we-inline we-nowrap" },
-                    buttonEl(t("qpTitle"), () => host.openQuickPanel()),
-                    buttonEl(t("libTitle"), () => host.openLibrary())
-                ), t("stQuickDesc")),
-                row(t("stReset"), buttonEl(t("stResetBtn"), () => {
-                    resetCommon();
-                    render();
-                    showMessage(t("stResetDone"), 2000);
-                }), t("stResetDesc")),
-                row(t("stStorage"), el("div", { class: "we-inline we-nowrap" },
-                    el("span", { class: "we-status" }, `${storageDiag.common} / ${storageDiag.device}`),
-                    buttonEl(t("stReload"), () => {
-                        void reloadFromDisk().then(() => {
-                            host.applyLook();
+        const side = el("div", { class: "we-tab-side" });
+        const wrap = el("div", { class: "we-tab-wrap" });
+        for (const tab of TABS) {
+            side.append(
+                el(
+                    "div",
+                    {
+                        class: `we-tab-item${tab.name === active ? " we-tab-item--on" : ""}`,
+                        onclick: () => {
+                            active = tab.name;
                             render();
-                            showMessage(t("stReloaded"), 2000);
-                        });
-                    })
-                ), t("stStorageDesc")),
-                el("div", { class: "we-srow we-srow--hint" },
-                    el("div", { class: "we-sinfo" }, el("div", { class: "we-shint" }, t("stShortcuts"))))
-            )
-        );
+                        },
+                    },
+                    iconEl(tab.icon),
+                    el("span", { class: "we-tab-item-text" }, t(tab.labelKey))
+                )
+            );
+            wrap.append(
+                el(
+                    "div",
+                    { class: `we-pane${tab.name === active ? " we-pane--on" : ""}` },
+                    tab.build({ host, rerender: render })
+                )
+            );
+        }
+        body.replaceChildren(side, wrap);
     };
 
     render();
@@ -175,8 +118,8 @@ export function openSettingsDialog(host: Host): void {
     dialog = new Dialog({
         title: t("stTitle"),
         content: '<div class="we-settings-mount"></div>',
-        width: "min(680px, 94vw)",
-        height: "min(760px, 88vh)",
+        width: "min(760px, 94vw)",
+        height: "min(720px, 88vh)",
         destroyCallback: () => {
             saveState();
             dialog = null;
@@ -187,81 +130,416 @@ export function openSettingsDialog(host: Host): void {
 
 /* ---------------- 各分区 ---------------- */
 
-function buildSourceSection(host: Host): HTMLElement {
-    const currentLabel = el("span", { class: "we-status" }, host.currentWallpaper()?.title ?? t("stNone"));
+function buildGlobalPane(ctx: Ctx): HTMLElement {
+    const { host } = ctx;
+    const currentLabel = el("span", { class: "we-status" }, host.currentTitle() || t("stNone"));
+    return pane(
+        item(
+            t("stEnable"),
+            switchEl(state.common.enabled, (v) => {
+                state.common.enabled = v;
+                host.applyLook();
+            })
+        ),
+        item(
+            t("stRotate"),
+            rangeEl({
+                min: 0,
+                max: 120,
+                step: 5,
+                value: state.common.rotateMinutes,
+                format: (v) => (v === 0 ? t("stRotateOff") : tArgs("stRotateMinutes", { minutes: Math.round(v) })),
+                onInput: (v) => {
+                    state.common.rotateMinutes = v;
+                    host.applyLook();
+                },
+            })
+        ),
+        item(
+            t("stRandomOnStart"),
+            switchEl(state.common.randomOnStart, (v) => {
+                state.common.randomOnStart = v;
+                saveState();
+            })
+        ),
+        item(
+            t("stWallpaper"),
+            el(
+                "div",
+                { class: "we-inline we-nowrap" },
+                buttonEl(t("stPick"), () => host.openLibrary()),
+                buttonEl(t("qpRandom"), () => host.randomWallpaper()),
+                currentLabel
+            )
+        ),
+        item(
+            t("stQuick"),
+            el(
+                "div",
+                { class: "we-inline we-nowrap" },
+                buttonEl(t("qpTitle"), () => host.openQuickPanel()),
+                buttonEl(t("libTitle"), () => host.openLibrary())
+            )
+        )
+    );
+}
+
+function buildSourcesPane(ctx: Ctx): HTMLElement {
+    const { host, rerender } = ctx;
     const libStatus = el("span", { class: "we-status" });
-    let dirsArea: HTMLTextAreaElement | null = null;
+    const useUrl = state.common.wallpaperSource === "url";
 
     const dirs = textEl(
-        state.device.workshopDirs.join("\n"),
+        state.device.galleryDirs.join("\n"),
         t("stLibraryPlaceholder"),
         (v) => {
-            state.device.workshopDirs = v.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+            state.device.galleryDirs = v
+                .split(/\r?\n/)
+                .map((s) => s.trim())
+                .filter(Boolean);
             saveState();
         },
         true
     ) as HTMLTextAreaElement;
     dirs.rows = 3;
-    dirsArea = dirs;
 
-    return section(
-        t("secSource"),
-        columnRow(t("stLibrary"), dirs, t("stLibraryDesc")),
-        row(t("stLibraryActions"), el("div", { class: "we-inline we-nowrap" },
-            buttonEl(t("stDetect"), () => {
-                const roots = detectRoots();
-                state.device.workshopDirs = roots;
-                if (dirsArea) dirsArea.value = roots.join("\n");
-                saveState();
-                showMessage(tArgs("stDetected", { count: roots.length }), 3000);
-            }),
-            buttonEl(t("stRescan"), () => {
-                void host
-                    .refreshLibrary()
-                    .then((count) => {
-                        libStatus.textContent = tArgs("libCount", { count });
-                        showMessage(tArgs("stDetected", { count }), 3000);
-                    })
-                    .catch(() => {
-                        libStatus.textContent = t("msgNoLibrary");
-                    });
-            }),
-            libStatus
-        ), t("stLibraryActionsDesc")),
-        row(t("stWallpaper"), el("div", { class: "we-inline we-nowrap" },
-            buttonEl(t("stPick"), () => host.openLibrary()),
-            buttonEl(t("qpRandom"), () => host.randomWallpaper()),
-            currentLabel
-        ), t("stWallpaperDesc")),
-        row(t("stUrl"), textEl(state.common.urlWallpaper, "https://example.com/wallpaper.mp4", (v) => {
-            state.common.urlWallpaper = v.trim();
-            host.applyLook();
-        }), t("stUrlDesc"))
+    const rows: HTMLElement[] = [
+        item(
+            t("stSource"),
+            el(
+                "div",
+                { class: "we-inline we-nowrap" },
+                el("span", { class: "we-status" }, useUrl ? t("stSourceUrl") : t("stSourceLocal")),
+                switchEl(useUrl, (v) => {
+                    state.common.wallpaperSource = v ? "url" : "local";
+                    saveState();
+                    host.applyLook();
+                    // 两套配置的控件不同，切完重建面板
+                    rerender();
+                })
+            )
+        ),
+    ];
+
+    if (useUrl) {
+        // 网络来源：只留 URL 输入（本地图库配置仍保留在配置里，切回去就能用）
+        rows.push(
+            item(
+                t("stUrl"),
+                textEl(state.common.urlWallpaper, "https://example.com/wallpaper.mp4", (v) => {
+                    state.common.urlWallpaper = v.trim();
+                    host.applyLook();
+                })
+            )
+        );
+    } else {
+        rows.push(
+            columnItem(t("stLibrary"), dirs),
+            item(
+                t("stLibraryActions"),
+                el(
+                    "div",
+                    { class: "we-inline we-nowrap" },
+                    buttonEl(t("stRescan"), () => {
+                        void host
+                            .refreshLibrary()
+                            .then((count) => {
+                                libStatus.textContent = tArgs("libCount", { count });
+                                showMessage(tArgs("stDetected", { count }), 3000);
+                            })
+                            .catch(() => {
+                                libStatus.textContent = t("msgNoLibrary");
+                            });
+                    }),
+                    libStatus
+                )
+            )
+        );
+    }
+
+    return pane(...rows);
+}
+
+function buildPicturePane(ctx: Ctx): HTMLElement {
+    const { host } = ctx;
+    return pane(
+        item(
+            t("stFit"),
+            selectEl(
+                state.common.fit,
+                [
+                    { value: "cover", label: t("stFitCover") },
+                    { value: "blurfill", label: t("stFitBlurfill") },
+                    { value: "contain", label: t("stFitContain") },
+                    { value: "stretch", label: t("stFitStretch") },
+                ],
+                (v) => {
+                    state.common.fit = v as typeof state.common.fit;
+                    host.applyLook();
+                }
+            )
+        ),
+        item(
+            t("stPosition"),
+            el(
+                "div",
+                { class: "we-inline" },
+                rangeEl({
+                    min: 0,
+                    max: 100,
+                    step: 1,
+                    value: state.common.positionX,
+                    format: (v) => `X ${Math.round(v)}%`,
+                    onInput: (v) => {
+                        state.common.positionX = v;
+                        host.applyLook();
+                    },
+                }),
+                rangeEl({
+                    min: 0,
+                    max: 100,
+                    step: 1,
+                    value: state.common.positionY,
+                    format: (v) => `Y ${Math.round(v)}%`,
+                    onInput: (v) => {
+                        state.common.positionY = v;
+                        host.applyLook();
+                    },
+                })
+            )
+        ),
+        item(
+            t("stBlur"),
+            rangeEl({
+                min: 0,
+                max: 40,
+                step: 1,
+                value: state.common.blur,
+                format: fmtPx,
+                onInput: (v) => {
+                    state.common.blur = v;
+                    host.applyLook();
+                },
+            })
+        ),
+        item(
+            t("stBrightness"),
+            rangeEl({
+                min: 0.2,
+                max: 1.6,
+                step: 0.05,
+                value: state.common.brightness,
+                format: fmtRatio,
+                onInput: (v) => {
+                    state.common.brightness = v;
+                    host.applyLook();
+                },
+            })
+        ),
+        item(
+            t("stSaturate"),
+            rangeEl({
+                min: 0,
+                max: 2,
+                step: 0.05,
+                value: state.common.saturate,
+                format: fmtRatio,
+                onInput: (v) => {
+                    state.common.saturate = v;
+                    host.applyLook();
+                },
+            })
+        ),
+        item(
+            t("stMask"),
+            switchEl(state.common.maskEnabled, (v) => {
+                state.common.maskEnabled = v;
+                host.applyLook();
+            })
+        ),
+        item(t("stMaskColor"), maskColorControl(host)),
+        item(
+            t("stMaskOpacity"),
+            rangeEl({
+                min: 0,
+                max: 1,
+                step: 0.01,
+                value: state.common.maskOpacity,
+                format: fmtPercent,
+                onInput: (v) => {
+                    state.common.maskOpacity = v;
+                    host.applyLook();
+                },
+            })
+        )
     );
 }
 
-function buildPanelsSection(host: Host, rerender: () => void): HTMLElement {
+function buildUiPane(ctx: Ctx): HTMLElement {
+    const { host, rerender } = ctx;
     const surfaces = el("div", { class: "we-surface-list" });
     for (const surface of SURFACE_LIST) {
         surfaces.append(buildSurfaceRow(surface, host));
     }
-    return section(
-        t("secPanels"),
-        row(t("stUIMode"), selectEl(state.common.uiMode, [
-            { value: "panels", label: t("stUIModePanels") },
-            { value: "opacity", label: t("stUIModeOpacity") },
-            { value: "off", label: t("stUIModeOff") },
-        ], (v) => { state.common.uiMode = v as typeof state.common.uiMode; host.applyLook(); }), t("stUIModeDesc")),
-        row(t("stUIStrength"), rangeEl({
-            min: 0, max: 1, step: 0.05, value: state.common.uiStrength, format: fmtPercent,
-            onInput: (v) => { state.common.uiStrength = v; host.applyLook(); },
-        }), t("stUIStrengthDesc")),
-        columnRow(t("sfTitle"), surfaces, t("sfDesc")),
-        row(t("sfPreset"), el("div", { class: "we-inline we-nowrap" },
-            presetButton("glass", host, rerender),
-            presetButton("clear", host, rerender),
-            presetButton("opaque", host, rerender)
-        ), t("sfPresetDesc"))
+    return pane(
+        sec(
+            t("secPanels"),
+            item(
+                t("stUIMode"),
+                selectEl(
+                    state.common.uiMode,
+                    [
+                        { value: "panels", label: t("stUIModePanels") },
+                        { value: "opacity", label: t("stUIModeOpacity") },
+                        { value: "off", label: t("stUIModeOff") },
+                    ],
+                    (v) => {
+                        state.common.uiMode = v as typeof state.common.uiMode;
+                        host.applyLook();
+                    }
+                )
+            ),
+            item(
+                t("stUIStrength"),
+                rangeEl({
+                    min: 0,
+                    max: 1,
+                    step: 0.05,
+                    value: state.common.uiStrength,
+                    format: fmtPercent,
+                    onInput: (v) => {
+                        state.common.uiStrength = v;
+                        host.applyLook();
+                    },
+                })
+            ),
+            columnItem(t("sfTitle"), surfaces),
+            item(
+                t("sfPreset"),
+                el(
+                    "div",
+                    { class: "we-inline we-nowrap" },
+                    presetButton("glass", host, rerender),
+                    presetButton("clear", host, rerender),
+                    presetButton("opaque", host, rerender)
+                )
+            )
+        ),
+        buildCodeSection(host)
+    );
+}
+
+function buildPlaybackPane(ctx: Ctx): HTMLElement {
+    const { host } = ctx;
+    return pane(
+        item(
+            t("stMute"),
+            switchEl(state.common.muted, (v) => {
+                state.common.muted = v;
+                host.applyLook();
+            })
+        ),
+        item(
+            t("stVolume"),
+            rangeEl({
+                min: 0,
+                max: 1,
+                step: 0.05,
+                value: state.common.volume,
+                format: fmtPercent,
+                onInput: (v) => {
+                    state.common.volume = v;
+                    if (v > 0) state.common.muted = false;
+                    host.applyLook();
+                },
+            })
+        ),
+        item(
+            t("stRate"),
+            rangeEl({
+                min: 0.25,
+                max: 2,
+                step: 0.05,
+                value: state.common.playbackRate,
+                format: fmtRatio,
+                onInput: (v) => {
+                    state.common.playbackRate = v;
+                    host.applyLook();
+                },
+            })
+        ),
+        item(
+            t("stPauseHidden"),
+            switchEl(state.common.pauseWhenHidden, (v) => {
+                state.common.pauseWhenHidden = v;
+                host.applyLook();
+            })
+        ),
+        item(
+            t("stWebMute"),
+            switchEl(state.common.webMuted, (v) => {
+                state.common.webMuted = v;
+                host.applyLook();
+            })
+        )
+    );
+}
+
+function buildAdvancedPane(ctx: Ctx): HTMLElement {
+    const { host, rerender } = ctx;
+    return pane(
+        item(
+            t("stReset"),
+            buttonEl(t("stResetBtn"), () => {
+                resetCommon();
+                rerender();
+                showMessage(t("stResetDone"), 2000);
+            })
+        ),
+        item(
+            t("stStorage"),
+            el(
+                "div",
+                { class: "we-inline we-nowrap" },
+                el("span", { class: "we-status" }, `${storageDiag.common} / ${storageDiag.device}`),
+                buttonEl(t("stReload"), () => {
+                    void reloadFromDisk().then(() => {
+                        host.applyLook();
+                        rerender();
+                        showMessage(t("stReloaded"), 2000);
+                    });
+                })
+            )
+        ),
+        hintRow(t("stShortcuts"))
+    );
+}
+
+function buildAboutPane(ctx: Ctx): HTMLElement {
+    const { host } = ctx;
+    return el(
+        "div",
+        { class: "we-about" },
+        el(
+            "div",
+            { class: "we-about-hero" },
+            el("img", { class: "we-about-icon", src: `plugins/${pkgName}/icon.png`, alt: "icon" }),
+            el("div", { class: "we-about-title" }, `${pkgName} v${pkgVersion}`),
+            el("div", { class: "we-about-desc" }, t("aboutDesc"))
+        ),
+        el(
+            "div",
+            { class: "we-about-meta" },
+            el("span", { class: "we-status" }, t("aboutAuthor")),
+            el("a", { href: AUTHOR_URL, target: "_blank", rel: "noopener" }, AUTHOR_NAME),
+            el("span", { class: "we-status" }, `${t("aboutEnv")}: ${host.isDesktopEnv() ? "desktop" : "browser"}`)
+        ),
+        el(
+            "div",
+            { class: "we-about-links" },
+            el("a", { href: PKG_URL, target: "_blank", rel: "noopener" }, t("aboutRepo")),
+            el("span", { class: "we-status" }, "MIT License")
+        )
     );
 }
 
@@ -273,21 +551,44 @@ function buildSurfaceRow(surface: PanelSurface, host: Host): HTMLElement {
         select.value = "custom";
         host.applyLook();
     };
-    const colorInput = colorEl(bg.color, (v) => { bg.color = v; toCustom(); });
-    colorInput.title = t("sfColorLight");
-    const colorDarkInput = colorEl(bg.colorDark || bg.color, (v) => { bg.colorDark = v; toCustom(); });
-    colorDarkInput.title = t("sfColorDark");
-    const select = selectEl(bg.useTheme ? "theme" : "custom", [
-        { value: "theme", label: t("sfTheme") },
-        { value: "custom", label: t("sfCustom") },
-    ], (v) => { bg.useTheme = v === "theme"; host.applyLook(); });
-    const alpha = rangeEl({
-        min: 0, max: 1, step: 0.05, value: bg.alpha, format: fmtPercent,
-        onInput: (v) => { bg.alpha = v; host.applyLook(); },
+    const colorInput = colorEl(bg.color, (v) => {
+        bg.color = v;
+        toCustom();
     });
-    return el("div", { class: "we-surface-row" },
+    colorInput.title = t("sfColorLight");
+    const colorDarkInput = colorEl(bg.colorDark || bg.color, (v) => {
+        bg.colorDark = v;
+        toCustom();
+    });
+    colorDarkInput.title = t("sfColorDark");
+    const select = selectEl(
+        bg.useTheme ? "theme" : "custom",
+        [
+            { value: "theme", label: t("sfTheme") },
+            { value: "custom", label: t("sfCustom") },
+        ],
+        (v) => {
+            bg.useTheme = v === "theme";
+            host.applyLook();
+        }
+    );
+    const alpha = rangeEl({
+        min: 0,
+        max: 1,
+        step: 0.05,
+        value: bg.alpha,
+        format: fmtPercent,
+        onInput: (v) => {
+            bg.alpha = v;
+            host.applyLook();
+        },
+    });
+    return el(
+        "div",
+        { class: "we-surface-row" },
         el("div", { class: "we-slabel" }, t(SURFACE_KEY[surface])),
-        el("div", { class: "we-sctl" }, select, colorInput, colorDarkInput, alpha));
+        el("div", { class: "we-sctl" }, select, colorInput, colorDarkInput, alpha)
+    );
 }
 
 /** 代码块背景：调色板直选 + 自定义颜色 + 不透明度（与结构列表里的 code 共用同一份配置） */
@@ -313,14 +614,18 @@ function buildCodeSection(host: Host): HTMLElement {
         host.applyLook();
     });
 
-    const modeSelect = selectEl(bg.useTheme ? "theme" : "custom", [
-        { value: "theme", label: t("sfTheme") },
-        { value: "custom", label: t("sfCustom") },
-    ], (v) => {
-        bg.useTheme = v === "theme";
-        sync();
-        host.applyLook();
-    });
+    const modeSelect = selectEl(
+        bg.useTheme ? "theme" : "custom",
+        [
+            { value: "theme", label: t("sfTheme") },
+            { value: "custom", label: t("sfCustom") },
+        ],
+        (v) => {
+            bg.useTheme = v === "theme";
+            sync();
+            host.applyLook();
+        }
+    );
 
     const lightInput = colorEl(bg.color, (v) => {
         bg.color = v;
@@ -341,7 +646,11 @@ function buildCodeSection(host: Host): HTMLElement {
     darkInput.title = t("sfColorDark");
 
     const alpha = rangeWithHandle({
-        min: 0, max: 1, step: 0.05, value: bg.alpha, format: fmtPercent,
+        min: 0,
+        max: 1,
+        step: 0.05,
+        value: bg.alpha,
+        format: fmtPercent,
         onInput: (v) => {
             bg.alpha = v;
             palette.set(paletteValue(bg));
@@ -357,12 +666,12 @@ function buildCodeSection(host: Host): HTMLElement {
         alpha.set(bg.alpha);
     };
 
-    return section(
+    return sec(
         t("secCode"),
-        columnRow(t("codePalette"), palette.root, t("codePaletteDesc")),
-        row(t("codeMode"), modeSelect, t("codeModeDesc")),
-        row(t("codeColor"), el("div", { class: "we-code-color" }, lightInput, darkInput), t("codeColorDesc")),
-        row(t("codeOpacity"), alpha.root, t("codeOpacityDesc"))
+        columnItem(t("codePalette"), palette.root),
+        item(t("codeMode"), modeSelect),
+        item(t("codeColor"), el("div", { class: "we-code-color" }, lightInput, darkInput)),
+        item(t("codeOpacity"), alpha.root)
     );
 }
 
@@ -455,24 +764,43 @@ function applyPanelPreset(preset: PanelPreset): void {
     showMessage(t("sfPresetApplied"), 2000);
 }
 
-/* ---------------- minimal 排版原语 ---------------- */
+/* ---------------- 排版原语（background-cover 布局） ---------------- */
 
-function section(title: string, ...rows: HTMLElement[]): HTMLElement {
+function iconEl(icon: string): HTMLElement {
+    return el("span", { class: "we-tab-icon", html: `<svg><use xlink:href="#${icon}"></use></svg>` });
+}
+
+/** 一个标签页的内容容器 */
+function pane(...rows: HTMLElement[]): HTMLElement {
+    return el("div", { class: "we-pane-body" }, ...rows);
+}
+
+/** 分区小标题（一个标签页内可以有多个分区） */
+function sec(title: string, ...rows: HTMLElement[]): HTMLElement {
     return el("section", { class: "we-sec" }, el("h3", { class: "we-sec-title" }, title), ...rows);
 }
 
-function row(label: string, control: HTMLElement | HTMLElement[], hint?: string): HTMLElement {
-    const info = el("div", { class: "we-sinfo" }, el("div", { class: "we-slabel" }, label));
-    if (hint) info.append(el("div", { class: "we-shint" }, hint));
+/** 一行设置：左侧标题，右侧控件 */
+function item(title: string, control: HTMLElement | HTMLElement[]): HTMLElement {
+    const info = el("div", { class: "fn__flex-1 we-sinfo" }, el("div", { class: "we-slabel" }, title));
     const ctl = el("div", { class: "we-sctl we-nowrap" });
     ctl.append(...(Array.isArray(control) ? control : [control]));
-    return el("div", { class: "we-srow" }, info, ctl);
+    return el("div", { class: "fn__flex b3-label we-srow" }, info, el("span", { class: "fn__space" }), ctl);
 }
 
-function columnRow(label: string, control: HTMLElement, hint?: string): HTMLElement {
-    const info = el("div", { class: "we-sinfo" }, el("div", { class: "we-slabel" }, label));
-    if (hint) info.append(el("div", { class: "we-shint" }, hint));
-    return el("div", { class: "we-srow we-srow--column" }, info, control);
+/** 控件占满整行（文本域、结构列表、调色板等） */
+function columnItem(label: string, control: HTMLElement): HTMLElement {
+    const info = el("div", { class: "fn__flex-1 we-sinfo" }, el("div", { class: "we-slabel" }, label));
+    return el("div", { class: "b3-label we-srow we-srow--column" }, info, control);
+}
+
+/** 纯提示行（无控件） */
+function hintRow(text: string): HTMLElement {
+    return el(
+        "div",
+        { class: "b3-label we-srow we-srow--hint" },
+        el("div", { class: "fn__flex-1 we-sinfo" }, el("div", { class: "b3-label__text we-shint" }, text))
+    );
 }
 
 function maskColorControl(host: Host): HTMLElement {
@@ -480,7 +808,9 @@ function maskColorControl(host: Host): HTMLElement {
         state.common.maskColor = v;
         host.applyLook();
     });
-    return el("div", { class: "we-inline we-nowrap" },
+    return el(
+        "div",
+        { class: "we-inline we-nowrap" },
         input,
         buttonEl(t("stMaskPresetDark"), () => {
             state.common.maskColor = "#000000";
