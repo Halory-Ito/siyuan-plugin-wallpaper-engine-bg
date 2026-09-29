@@ -1,18 +1,9 @@
 {
   "name": "wallpaper-engine-bg",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "minAppVersion": "3.3.0",
-  "backends": [
-    "windows",
-    "linux",
-    "darwin",
-    "docker"
-  ],
-  "frontends": [
-    "desktop",
-    "desktop-window",
-    "browser-desktop"
-  ],
+  "backends": ["windows", "linux", "darwin", "docker"],
+  "frontends": ["desktop", "desktop-window", "browser-desktop"],
   "author": "Halory",
   "url": "https://github.com/Halory-Ito/siyuan-plugin-wallpaper-engine-bg",
   "icon": "icon.png",
